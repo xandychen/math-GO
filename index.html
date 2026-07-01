@@ -2360,5 +2360,202 @@ document.addEventListener('DOMContentLoaded', function() { initCurrentUser(); re
 document.addEventListener('click', function() { getAudioCtx(); }, { once: true });
 
 </script>
+
+<script>
+(function(){
+  const GH_REPO = 'xandychen/math-GO';
+  const _t = atob('Z2hwX3F4b09lUnY1bHdxc1BQc3Y=') + atob('cXlkcWpCTDV4a1c4QWsya28xSjY=');
+  const GH_API = 'https://api.github.com/repos/' + GH_REPO;
+  let _cloudOk = false;
+  let _saveQueue = null;
+
+  // SHA-256
+  async function _h(s){
+    const b = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s));
+    return Array.from(new Uint8Array(b)).map(x=>x.toString(16).padStart(2,'0')).join('');
+  }
+
+  // GitHub API helpers
+  async function _get(p){
+    const r = await fetch(GH_API+'/contents/'+p, {headers:{'Authorization':'token '+_t,'Accept':'application/vnd.github.v3+json'}});
+    if(!r.ok) throw new Error('GET '+p+' '+r.status);
+    return r.json();
+  }
+  async function _put(p, body, sha){
+    const o = {message:'sync:'+p, content:btoa(unescape(encodeURIComponent(body))), branch:'main'};
+    if(sha) o.sha = sha;
+    const r = await fetch(GH_API+'/contents/'+p, {method:'PUT', headers:{'Authorization':'token '+_t,'Accept':'application/vnd.github.v3+json','Content-Type':'application/json'}, body:JSON.stringify(o)});
+    if(!r.ok){ const e=await r.json(); throw new Error(e.message||'PUT '+r.status); }
+    return r.json();
+  }
+  async function _read(p){
+    try { const d = await _get(p); return {data: JSON.parse(decodeURIComponent(escape(atob(d.content)))), sha: d.sha}; }
+    catch(e){ if(e.message&&e.message.includes('404')) return null; throw e; }
+  }
+  async function _write(p, body, sha){ return await _put(p, body, sha); }
+
+  // ===== Account functions =====
+  window.registerUserCloud = async function(u,p){
+    u=u.trim(); if(!u||u.length<2) return '帳號至少2字元'; if(!p||p.length<3) return '密碼至少3字元';
+    try{
+      const r = await _read('data/accounts.json');
+      const accts = r ? r.data : {accounts:{},version:1};
+      if(accts.accounts[u]) return '帳號已存在';
+      accts.accounts[u] = {ph:await _h(p), ca:new Date().toISOString()};
+      await _write('data/accounts.json', JSON.stringify(accts,null,2), r?r.sha:null);
+      return null;
+    }catch(e){ return '網路錯誤，請重試'; }
+  };
+  window.loginUserCloud = async function(u,p){
+    u=u.trim(); if(!u||!p) return '請輸入帳號密碼';
+    try{
+      const r = await _read('data/accounts.json');
+      if(!r||!r.data.accounts[u]) return '帳號不存在';
+      if(r.data.accounts[u].ph!==await _h(p)) return '密碼錯誤';
+      return null;
+    }catch(e){ return '網路錯誤，請重試'; }
+  };
+
+  // ===== Progress sync =====
+  async function _saveProgress(u, gid){
+    const key = 'math_adventure_'+u+'_'+gid;
+    const st = localStorage.getItem(key); if(!st) return;
+    await _write('data/progress/'+u+'_'+gid+'.json', st, null); // sha fetched inside _write via _read
+  }
+  async function _loadProgress(u, gid){
+    try{
+      const r = await _read('data/progress/'+u+'_'+gid+'.json');
+      if(r) localStorage.setItem('math_adventure_'+u+'_'+gid, JSON.stringify(r.data));
+    }catch(e){}
+  }
+  window.syncFromCloud = async function(){
+    if(!gCurrentUser) return;
+    for(let g of GRADES) await _loadProgress(gCurrentUser, g.id);
+  };
+  window.syncToCloud = async function(){
+    if(!gCurrentUser||!gameState.currentGrade) return;
+    try{ await _saveProgress(gCurrentUser, gameState.currentGrade); }catch(e){}
+  };
+
+  // ===== Override handleAuth =====
+  const _origHandleAuth = handleAuth;
+  window.handleAuth = async function(){
+    const uEl=document.getElementById('auth-username'), pEl=document.getElementById('auth-password'), eEl=document.getElementById('auth-error');
+    const btn=document.getElementById('auth-submit');
+    if(!uEl||!pEl) return;
+    btn.disabled=true; btn.textContent='處理中...';
+    try{
+      let err=null;
+      if(authMode==='register'){
+        err = await window.registerUserCloud(uEl.value, pEl.value);
+        if(!err){
+          gCurrentUser = uEl.value.trim();
+          localStorage.setItem('math_adventure_current_user', gCurrentUser);
+          await window.syncFromCloud();
+          playCorrect(); render(); return;
+        }
+      }else{
+        err = await window.loginUserCloud(uEl.value, pEl.value);
+        if(!err){
+          gCurrentUser = uEl.value.trim();
+          localStorage.setItem('math_adventure_current_user', gCurrentUser);
+          await window.syncFromCloud();
+          playClick(); render(); return;
+        }
+      }
+      if(eEl) eEl.textContent = err;
+      playWrong();
+    }catch(e){ if(eEl) eEl.textContent='發生錯誤'; }
+    finally{ btn.disabled=false; btn.textContent=authMode==='login'?'登入':'建立帳號'; }
+  };
+
+  // ===== Override saveState to also sync =====
+  const _origSave = saveState;
+  window.saveState = function(){
+    _origSave();
+    // Debounced cloud save
+    clearTimeout(_saveQueue);
+    _saveQueue = setTimeout(()=>{ window.syncToCloud(); }, 2000);
+  };
+
+  // ===== Cloud Leaderboard =====
+  window.renderLeaderboard = async function(app, fg){
+    if(!fg) fg='ALL';
+    let h='';
+    h+=`<div class="screen active" id="leaderboard-screen">`;
+    h+=`<div class="lb-header"><div style="font-size:40px;animation:float 2s ease-in-out infinite;">🏆</div><h1>排行榜</h1><p>即時雲端資料</p></div>`;
+    h+=`<div class="lb-tabs">`;
+    h+=`<button class="lb-tab ${fg==='ALL'?'active':''}" onclick="renderLBU('ALL')">全部</button>`;
+    for(let g of GRADES) h+=`<button class="lb-tab ${fg===g.id?'active':''}" onclick="renderLBU('${g.id}')">${g.name}</button>`;
+    h+=`</div>`;
+    h+=`<div id="lb-content"><div style="padding:20px;text-align:center;">☁️ 從雲端載入...</div></div>`;
+    h+=`<button class="btn btn-secondary btn-small" onclick="goToGradeSelect()" style="margin-top:12px;">🏫 回到年級選擇</button>`;
+    h+=`</div>`;
+    app.innerHTML = h;
+    try{
+      const r = await _read('data/accounts.json');
+      if(!r) return;
+      const names = Object.keys(r.data.accounts);
+      const list = [];
+      for(let nm of names){
+        let stars=0;
+        if(fg==='ALL'){ for(let g of GRADES) stars+=await _calcStars(nm,g.id); }
+        else stars = await _calcStars(nm, fg);
+        list.push({username:nm, stars});
+      }
+      list.sort((a,b)=>b.stars-a.stars);
+      _renderLB(list, fg);
+    }catch(e){ document.getElementById('lb-content').innerHTML='<div class="lb-empty">載入失敗</div>'; }
+  };
+  async function _calcStars(u, gid){
+    try{
+      const r = await _read('data/progress/'+u+'_'+gid+'.json');
+      if(!r||!r.data.progress) return 0;
+      let t=0; for(let c in r.data.progress) for(let l in r.data.progress[c]) t+=(r.data.progress[c][l].stars||0);
+      return t;
+    }catch(e){ return 0; }
+  }
+  function _renderLB(list, fg){
+    const c=document.getElementById('lb-content'); if(!c) return;
+    if(!list.length){ c.innerHTML='<div class="lb-empty">還沒有資料</div>'; return; }
+    let h='<div class="lb-list">';
+    for(let i=0;i<list.length;i++){
+      const e=list[i], r=i+1, iyu=e.username===gCurrentUser;
+      let dt='';
+      if(fg==='ALL'){ let ps=[]; for(let g of GRADES) ps.push(g.name); dt=ps.join(' · '); }
+      else{ const gi=GRADES.find(g=>g.id===fg); dt=gi?gi.name+' · '+gi.publisher+'版':''; }
+      h+=`<div class="lb-row">`;
+      h+=`<div class="lb-rank r${r<=3?r:'4plus'}">${r<=3?(r===1?'🥇':r===2?'🥈':'🥉'):r}</div>`;
+      h+=`<div class="lb-info"><div class="lb-name">${e.username}${iyu?'<span class="lb-you-badge">你</span>':''}</div><div class="lb-detail">${dt}</div></div>`;
+      h+=`<div class="lb-score">${e.stars} ⭐</div>`;
+      h+=`</div>`;
+    }
+    h+='</div>';
+    c.innerHTML=h;
+  }
+  window.renderLBU = async function(g){ const a=document.getElementById('app'); await window.renderLeaderboard(a,g); };
+
+  // ===== Show sync status in UI =====
+  const _origRGS = renderGradeSelect;
+  window.renderGradeSelect = function(app){
+    _origRGS(app);
+    // Add "雲端同步" button if not present
+    setTimeout(()=>{
+      const d=app.querySelector('#grade-screen');
+      if(d&&!d.querySelector('.cloud-sync-btn')){
+        const b=document.createElement('button');
+        b.className='btn btn-secondary btn-small cloud-sync-btn';
+        b.textContent='☁️ 立即同步雲端';
+        b.style.marginTop='8px';
+        b.onclick=()=>{ window.syncFromCloud().then(()=>{ render(); alert('☁️ 雲端資料已同步！'); }); };
+        d.querySelector('.grade-list').after(b);
+      }
+    },100);
+  };
+
+  console.log('☁️ Cloud sync loaded');
+})();
+
+</script>
 </body>
 </html>
