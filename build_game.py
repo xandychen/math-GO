@@ -1,0 +1,2447 @@
+#!/usr/bin/env python3
+"""Build the multi-grade math-adventure.html game."""
+import json
+
+# ===== CSS =====
+CSS = '''<style>
+:root {
+  --bg: #f0f4ff; --card: #ffffff; --primary: #4f46e5; --primary-light: #818cf8;
+  --success: #10b981; --warning: #f59e0b; --danger: #ef4444; --text: #1e293b;
+  --text-light: #64748b; --star: #fbbf24; --heart: #f472b6; --border: #e2e8f0;
+  --shadow: 0 4px 24px rgba(0,0,0,.08); --radius: 16px;
+  --font: 'Noto Sans TC', 'Microsoft JhengHei', sans-serif;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:100vh;display:flex;justify-content:center;align-items:center;overflow-x:hidden;background-image:radial-gradient(circle at 20% 20%,#e0e7ff 0%,transparent 50%),radial-gradient(circle at 80% 80%,#fce7f3 0%,transparent 50%),radial-gradient(circle at 50% 50%,#dbeafe 0%,transparent 50%)}
+#app{width:100%;max-width:520px;min-height:100vh;position:relative;display:flex;flex-direction:column}
+.screen{display:none;flex-direction:column;align-items:center;padding:24px 20px;min-height:100vh;width:100%}
+.screen.active{display:flex;animation:fadeIn .4s ease}
+@keyframes fadeIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+@keyframes bounceIn{0%{transform:scale(0);opacity:0}50%{transform:scale(1.15)}100%{transform:scale(1);opacity:1}}
+@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
+@keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.05)}}
+@keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-6px)}75%{transform:translateX(6px)}}
+@keyframes starPop{0%{transform:scale(0) rotate(0deg);opacity:0}50%{transform:scale(1.5) rotate(180deg);opacity:1}100%{transform:scale(1) rotate(360deg);opacity:1}}
+@keyframes confettiFall{0%{transform:translateY(-100vh) rotate(0deg);opacity:1}100%{transform:translateY(100vh) rotate(720deg);opacity:0}}
+@keyframes slideUp{0%{transform:translateY(30px);opacity:0}100%{transform:translateY(0);opacity:1}}
+
+#grade-screen{justify-content:center;gap:24px;text-align:center;background:linear-gradient(180deg,#eef2ff 0%,#f0f4ff 50%,#dbeafe 100%)}
+.grade-mascot{font-size:72px;animation:float 2s ease-in-out infinite}
+.grade-title h1{font-size:32px;font-weight:900;background:linear-gradient(135deg,#4f46e5,#ec4899);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:8px}
+.grade-title p{color:var(--text-light);font-size:15px}
+.grade-list{display:flex;flex-direction:column;gap:14px;width:100%;max-width:380px}
+.grade-card{background:white;border-radius:var(--radius);padding:20px 24px;box-shadow:var(--shadow);cursor:pointer;transition:all .2s;border:2px solid transparent;display:flex;align-items:center;gap:16px}
+.grade-card:hover{transform:translateY(-3px);box-shadow:0 8px 32px rgba(0,0,0,.12)}
+.grade-card:active{transform:scale(.97)}
+.grade-card .grade-icon{font-size:44px;flex-shrink:0}
+.grade-card .grade-info{text-align:left;flex:1}
+.grade-card .grade-name{font-size:20px;font-weight:800;color:var(--text)}
+.grade-card .grade-pub{font-size:13px;color:var(--text-light)}
+.grade-card .grade-stars{font-size:13px;color:var(--star);font-weight:600}
+
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:14px 32px;border:none;border-radius:50px;font-size:18px;font-weight:700;cursor:pointer;transition:all .2s;font-family:var(--font);position:relative;overflow:hidden}
+.btn:active{transform:scale(.95)}
+.btn-primary{background:linear-gradient(135deg,#4f46e5,#7c3aed);color:white;box-shadow:0 4px 16px rgba(79,70,229,.3)}
+.btn-primary:hover{box-shadow:0 6px 24px rgba(79,70,229,.4);transform:translateY(-2px)}
+.btn-secondary{background:white;color:var(--primary);border:2px solid var(--primary-light)}
+.btn-secondary:hover{background:#eef2ff}
+.btn-small{padding:8px 20px;font-size:14px}
+
+.top-bar{width:100%;display:flex;justify-content:space-between;align-items:center;padding:8px 0}
+.top-bar .back-btn{width:40px;height:40px;border-radius:50%;border:none;background:white;font-size:20px;cursor:pointer;box-shadow:var(--shadow);display:flex;align-items:center;justify-content:center}
+.progress-indicator{display:flex;align-items:center;gap:6px;font-size:14px;font-weight:600;color:var(--primary);background:#eef2ff;padding:6px 14px;border-radius:50px}
+
+.world-map-title{font-size:22px;font-weight:900;margin:8px 0 4px;text-align:center}
+.world-map-subtitle{font-size:14px;color:var(--text-light);margin-bottom:16px;text-align:center}
+.world-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;width:100%;margin-bottom:20px}
+.world-card{background:white;border-radius:var(--radius);padding:16px;box-shadow:var(--shadow);cursor:pointer;transition:all .2s;border:2px solid transparent;position:relative;overflow:hidden}
+.world-card:hover{transform:translateY(-3px);box-shadow:0 8px 32px rgba(0,0,0,.12)}
+.world-card.locked{opacity:.5;pointer-events:none;filter:grayscale(.3)}
+.world-card .world-icon{font-size:32px;margin-bottom:4px}
+.world-card .world-name{font-size:14px;font-weight:700;color:var(--text)}
+.world-card .world-topic{font-size:11px;color:var(--text-light)}
+.world-card .world-stars{display:flex;gap:2px;margin-top:6px}
+.world-card .world-stars span{font-size:14px;color:#ddd}
+.world-card .world-stars span.earned{color:var(--star)}
+.world-card .lock-icon{position:absolute;top:12px;right:12px;font-size:18px}
+
+.level-list{width:100%;display:flex;flex-direction:column;gap:10px;margin:16px 0}
+.level-card{background:white;border-radius:var(--radius);padding:16px 20px;display:flex;align-items:center;justify-content:space-between;box-shadow:var(--shadow);cursor:pointer;transition:all .2s;border:2px solid transparent}
+.level-card:hover{transform:translateX(4px);border-color:var(--primary-light)}
+.level-card.locked{opacity:.5;pointer-events:none;filter:grayscale(.3)}
+.level-info{display:flex;flex-direction:column;gap:2px}
+.level-info .level-name{font-size:16px;font-weight:700}
+.level-info .level-desc{font-size:12px;color:var(--text-light)}
+.level-difficulty{font-size:12px;padding:4px 10px;border-radius:50px;font-weight:600}
+.diff-easy{background:#d1fae5;color:#065f46}
+.diff-medium{background:#fef3c7;color:#92400e}
+.diff-hard{background:#fee2e2;color:#991b1b}
+
+.game-header{width:100%;display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:4px}
+.question-counter{font-size:14px;font-weight:600;color:var(--text-light)}
+.timer-bar-wrapper{width:100%;height:8px;background:#e2e8f0;border-radius:50px;margin-bottom:12px;overflow:hidden}
+.timer-bar{height:100%;background:linear-gradient(90deg,#10b981,#f59e0b,#ef4444);border-radius:50px;transition:width .3s linear}
+.timer-bar.urgent{animation:pulse .5s infinite}
+.hearts{display:flex;gap:4px;font-size:22px}
+.question-card{background:white;border-radius:var(--radius);padding:24px;width:100%;box-shadow:var(--shadow);text-align:center;min-height:180px;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.question-text{font-size:20px;font-weight:700;margin-bottom:20px;line-height:1.5}
+.options-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;width:100%;max-width:400px}
+.option-btn{padding:14px;border:2px solid var(--border);border-radius:12px;background:white;font-size:16px;font-weight:600;cursor:pointer;transition:all .15s;font-family:var(--font)}
+.option-btn:hover{border-color:var(--primary-light);background:#eef2ff}
+.option-btn.correct{background:#d1fae5;border-color:var(--success);color:#065f46;animation:bounceIn .3s ease}
+.option-btn.wrong{background:#fee2e2;border-color:var(--danger);color:#991b1b;animation:shake .4s ease}
+
+.feedback-overlay{position:fixed;top:0;left:0;right:0;bottom:0;display:flex;align-items:center;justify-content:center;z-index:100;pointer-events:none}
+.feedback-text{font-size:48px;font-weight:900;animation:bounceIn .4s ease}
+.feedback-text.correct-fb{color:var(--success)}
+.feedback-text.wrong-fb{color:var(--danger)}
+
+.result-card{background:white;border-radius:var(--radius);padding:32px 24px;box-shadow:var(--shadow);text-align:center;width:100%;display:flex;flex-direction:column;align-items:center;gap:16px}
+.result-stars{display:flex;gap:8px;font-size:48px}
+.result-stars .star{color:#ddd}
+.result-stars .star.earned{color:var(--star);animation:starPop .5s ease forwards}
+.result-score{font-size:18px;font-weight:700;color:var(--text-light)}
+.result-score span{color:var(--primary);font-size:32px;font-weight:900}
+.result-msg{font-size:16px;color:var(--text-light)}
+.result-buttons{display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
+
+.review-section{background:white;border-radius:var(--radius);box-shadow:0 4px 20px rgba(0,0,0,.08);margin:16px 16px 32px;overflow:hidden;animation:slideUp .3s ease}
+.review-header{display:flex;justify-content:space-between;align-items:center;padding:14px 20px;background:linear-gradient(135deg,#fef3c7,#fde68a);font-weight:800;font-size:16px;color:#92400e;cursor:pointer;user-select:none}
+.review-header:hover{background:linear-gradient(135deg,#fef3c7,#fcd34d)}
+.review-toggle{font-size:12px;transition:transform .2s}
+.review-body{padding:0 20px 16px}
+.review-item{margin-top:16px;padding:16px;background:#fefce8;border-radius:12px;border:1px solid #fde68a}
+.review-qnum{display:inline-block;background:var(--danger);color:white;font-size:12px;font-weight:700;padding:2px 10px;border-radius:20px;margin-bottom:8px}
+.review-question{font-size:16px;font-weight:700;color:#1e293b;margin-bottom:10px;line-height:1.5}
+.review-answers{display:flex;gap:12px;margin-bottom:10px;flex-wrap:wrap}
+.review-row{display:flex;align-items:center;gap:6px;padding:6px 12px;border-radius:8px;font-size:14px}
+.wrong-row{background:#fef2f2;border:1px solid #fecaca}
+.correct-row{background:#f0fdf4;border:1px solid #bbf7d0}
+.review-label{font-weight:600;color:var(--text-light);white-space:nowrap}
+.wrong-val{font-weight:800;color:var(--danger);text-decoration:line-through}
+.correct-val{font-weight:800;color:var(--success)}
+.review-explanation{background:white;border-radius:8px;padding:12px;border:1px solid #e5e7eb}
+.review-exp-title{font-size:13px;font-weight:700;color:var(--primary);margin-bottom:6px}
+.review-exp-text{font-size:14px;color:#1e293b;line-height:1.7}
+
+.stats-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.5);z-index:200;display:flex;align-items:center;justify-content:center}
+.stats-card{background:white;border-radius:var(--radius);padding:24px;width:90%;max-width:400px;max-height:80vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.2)}
+.stats-card h3{font-size:20px;margin-bottom:16px;text-align:center}
+.stats-row{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:14px}
+
+.confetti-container{position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:150;overflow:hidden}
+.confetti-piece{position:absolute;width:10px;height:10px;border-radius:2px;animation:confettiFall 3s ease-out forwards}
+
+.character-bubble{position:fixed;bottom:100px;left:50%;transform:translateX(-50%);background:white;border-radius:20px;padding:10px 18px;box-shadow:var(--shadow);font-size:14px;font-weight:600;z-index:50;max-width:280px;text-align:center;animation:bounceIn .3s ease}
+.character-bubble::after{content:'';position:absolute;bottom:-10px;left:50%;transform:translateX(-50%);width:0;height:0;border-left:10px solid transparent;border-right:10px solid transparent;border-top:10px solid white}
+
+@media(max-width:400px){.world-grid{grid-template-columns:1fr 1fr;gap:8px}.world-card{padding:12px}.grade-title h1{font-size:26px}.question-text{font-size:17px}.options-grid{gap:8px}.option-btn{padding:12px;font-size:15px}}
+
+/* Auth Screen */
+#auth-screen{justify-content:center;gap:20px;text-align:center;background:linear-gradient(180deg,#eef2ff 0%,#f0f4ff 50%,#dbeafe 100%)}
+.auth-mascot{font-size:64px;animation:float 2s ease-in-out infinite}
+.auth-title h1{font-size:28px;font-weight:900;background:linear-gradient(135deg,#4f46e5,#ec4899);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:6px}
+.auth-title p{color:var(--text-light);font-size:14px}
+.auth-form{display:flex;flex-direction:column;gap:12px;width:100%;max-width:340px}
+.auth-input{padding:14px 18px;border:2px solid var(--border);border-radius:12px;font-size:16px;font-family:var(--font);transition:border .2s;background:white}
+.auth-input:focus{outline:none;border-color:var(--primary-light)}
+.auth-tabs{display:flex;gap:0;margin-bottom:4px;border-radius:12px;overflow:hidden;border:2px solid var(--border)}
+.auth-tab{flex:1;padding:10px;border:none;background:#f1f5f9;font-size:15px;font-weight:700;cursor:pointer;transition:all .2s;font-family:var(--font);color:var(--text-light)}
+.auth-tab.active{background:var(--primary);color:white}
+.auth-error{color:var(--danger);font-size:13px;min-height:18px;font-weight:600}
+.auth-user-badge{display:inline-flex;align-items:center;gap:6px;background:#eef2ff;padding:6px 14px;border-radius:50px;font-size:13px;font-weight:600;color:var(--primary)}
+
+/* Leaderboard */
+#leaderboard-screen{justify-content:flex-start;gap:12px;padding:16px 20px}
+.lb-header{text-align:center;width:100%;padding:12px 0}
+.lb-header h1{font-size:24px;font-weight:900;color:var(--primary)}
+.lb-header p{font-size:13px;color:var(--text-light)}
+.lb-tabs{display:flex;gap:6px;justify-content:center;margin-bottom:8px}
+.lb-tab{padding:8px 16px;border:2px solid var(--border);border-radius:50px;background:white;font-size:14px;font-weight:600;cursor:pointer;transition:all .2s;font-family:var(--font);color:var(--text-light)}
+.lb-tab.active{background:var(--primary);color:white;border-color:var(--primary)}
+.lb-list{width:100%;display:flex;flex-direction:column;gap:8px;max-width:440px}
+.lb-row{display:flex;align-items:center;gap:12px;background:white;border-radius:12px;padding:14px 18px;box-shadow:var(--shadow);transition:transform .15s}
+.lb-row:hover{transform:translateX(4px)}
+.lb-rank{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:900;flex-shrink:0}
+.lb-rank.r1{background:linear-gradient(135deg,#fbbf24,#f59e0b);color:white}
+.lb-rank.r2{background:linear-gradient(135deg,#94a3b8,#64748b);color:white}
+.lb-rank.r3{background:linear-gradient(135deg,#cd7f32,#b45309);color:white}
+.lb-rank.r4plus{background:#f1f5f9;color:var(--text-light)}
+.lb-info{flex:1;text-align:left}
+.lb-name{font-size:16px;font-weight:700}
+.lb-detail{font-size:12px;color:var(--text-light)}
+.lb-score{font-size:18px;font-weight:900;color:var(--star)}
+.lb-empty{text-align:center;padding:40px 20px;color:var(--text-light);font-size:15px}
+.lb-you-badge{display:inline-block;background:var(--success);color:white;font-size:10px;padding:2px 8px;border-radius:20px;margin-left:6px;font-weight:700}
+</style>'''
+
+# ===== HTML WRAPPER START =====
+HTML_START = '''<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>數學大冒險</title>
+'''
+
+# ===== HTML MIDDLE =====
+HTML_MIDDLE = '''
+</head>
+<body>
+<div id="app"></div>
+<script>
+'''
+
+# ===== HTML END =====
+HTML_END = '''
+</script>
+</body>
+</html>'''
+
+# ===== AUTH SYSTEM =====
+AUTH_JS = r'''
+// ===== Account System =====
+// 用全域變數追蹤目前登入的使用者，避免 localStorage 讀取延遲或不同步問題
+var gCurrentUser = null;
+
+function initCurrentUser() {
+  try {
+    gCurrentUser = localStorage.getItem('math_adventure_current_user') || null;
+  } catch(e) { gCurrentUser = null; }
+}
+
+function getAccounts() {
+  try {
+    return JSON.parse(localStorage.getItem('math_adventure_accounts') || '{}');
+  } catch(e) { return {}; }
+}
+
+function saveAccounts(accts) {
+  localStorage.setItem('math_adventure_accounts', JSON.stringify(accts));
+}
+
+function getCurrentUser() {
+  if (gCurrentUser === null) initCurrentUser();
+  return gCurrentUser;
+}
+
+function setCurrentUser(username) {
+  gCurrentUser = username ? username : null;
+  if (username) {
+    localStorage.setItem('math_adventure_current_user', username);
+  } else {
+    localStorage.removeItem('math_adventure_current_user');
+  }
+}
+
+function userStorageKey(gradeId) {
+  var user = gCurrentUser;
+  if (!user) return 'math_adventure_G4';
+  return 'math_adventure_' + user + '_' + gradeId;
+}
+
+function registerUser(username, password) {
+  username = username.trim();
+  if (!username || username.length < 2) return '帳號至少需要 2 個字元';
+  if (!password || password.length < 3) return '密碼至少需要 3 個字元';
+  var accts = getAccounts();
+  if (accts[username]) return '這個帳號已經存在了，換一個試試！';
+  accts[username] = { password: password, createdAt: new Date().toISOString() };
+  saveAccounts(accts);
+  return null;
+}
+
+function loginUser(username, password) {
+  username = username.trim();
+  if (!username || !password) return '請輸入帳號和密碼';
+  var accts = getAccounts();
+  if (!accts[username]) return '找不到這個帳號';
+  if (accts[username].password !== password) return '密碼不正確';
+  return null;
+}
+
+function logoutUser() {
+  gCurrentUser = null;
+  localStorage.removeItem('math_adventure_current_user');
+}
+
+// Calculate total stars for a user in a specific grade
+function getUserGradeStars(username, gradeId) {
+  try {
+    var st = JSON.parse(localStorage.getItem('math_adventure_' + username + '_' + gradeId) || '{}');
+    if (!st.progress) return 0;
+    var total = 0;
+    for (var chId in st.progress) {
+      for (var lvId in st.progress[chId]) {
+        total += st.progress[chId][lvId].stars || 0;
+      }
+    }
+    return total;
+  } catch(e) { return 0; }
+}
+
+// Get total stars across all grades for a user
+function getUserTotalStars(username) {
+  var total = 0;
+  for (var i = 0; i < GRADES.length; i++) {
+    total += getUserGradeStars(username, GRADES[i].id);
+  }
+  return total;
+}
+
+// Get all users sorted by stars for a specific grade
+function getLeaderboard(gradeId) {
+  var accts = getAccounts();
+  var list = [];
+  for (var username in accts) {
+    var stars = gradeId ? getUserGradeStars(username, gradeId) : getUserTotalStars(username);
+    list.push({ username: username, stars: stars });
+  }
+  list.sort(function(a, b) { return b.stars - a.stars; });
+  return list;
+}
+
+// ===== Auth Screen =====
+function renderAuth(app) {
+  var html = '';
+  html += '<div class="screen active" id="auth-screen">';
+  html += '<div class="auth-mascot">🧮</div>';
+  html += '<div class="auth-title"><h1>數學大冒險</h1><p>登入或建立帳號，開始你的學習之旅！</p></div>';
+  html += '<div class="auth-tabs">';
+  html += '<button class="auth-tab active" id="tab-login" onclick="switchAuthTab(\'login\')">登入</button>';
+  html += '<button class="auth-tab" id="tab-register" onclick="switchAuthTab(\'register\')">註冊</button>';
+  html += '</div>';
+  html += '<div class="auth-form">';
+  html += '<input class="auth-input" id="auth-username" type="text" placeholder="輸入帳號" maxlength="20" autocomplete="off">';
+  html += '<input class="auth-input" id="auth-password" type="password" placeholder="輸入密碼" maxlength="30">';
+  html += '<div class="auth-error" id="auth-error"></div>';
+  html += '<button class="btn btn-primary" id="auth-submit" onclick="handleAuth()">登入</button>';
+  html += '</div>';
+  html += '</div>';
+  app.innerHTML = html;
+
+  // Enter key support
+  setTimeout(function() {
+    var pwd = document.getElementById('auth-password');
+    var uname = document.getElementById('auth-username');
+    if (pwd) pwd.addEventListener('keydown', function(e) { if (e.key === 'Enter') handleAuth(); });
+    if (uname) uname.addEventListener('keydown', function(e) { if (e.key === 'Enter') handleAuth(); });
+  }, 50);
+}
+
+var authMode = 'login';
+
+function switchAuthTab(mode) {
+  authMode = mode;
+  var tabLogin = document.getElementById('tab-login');
+  var tabRegister = document.getElementById('tab-register');
+  var submit = document.getElementById('auth-submit');
+  var error = document.getElementById('auth-error');
+  if (mode === 'login') {
+    tabLogin.classList.add('active');
+    tabRegister.classList.remove('active');
+    submit.textContent = '登入';
+  } else {
+    tabRegister.classList.add('active');
+    tabLogin.classList.remove('active');
+    submit.textContent = '建立帳號';
+  }
+  if (error) error.textContent = '';
+}
+
+function handleAuth() {
+  var username = document.getElementById('auth-username').value;
+  var password = document.getElementById('auth-password').value;
+  var error = document.getElementById('auth-error');
+
+  var err = null;
+  if (authMode === 'register') {
+    err = registerUser(username, password);
+    if (!err) {
+      setCurrentUser(username.trim());
+      playCorrect();
+      render();
+      return;
+    }
+  } else {
+    err = loginUser(username, password);
+    if (!err) {
+      setCurrentUser(username.trim());
+      playClick();
+      render();
+      return;
+    }
+  }
+  if (error) error.textContent = err;
+  playWrong();
+}
+
+// ===== Leaderboard Screen =====
+function renderLeaderboard(app, filterGrade) {
+  if (!filterGrade) filterGrade = 'ALL';
+  var html = '';
+  html += '<div class="screen active" id="leaderboard-screen">';
+  html += '<div class="lb-header">';
+  html += '<div style="font-size:40px;animation:float 2s ease-in-out infinite;">🏆</div>';
+  html += '<h1>排行榜</h1>';
+  html += '<p>看看大家的學習成果！</p>';
+  html += '</div>';
+
+  // Grade filter tabs
+  html += '<div class="lb-tabs">';
+  html += '<button class="lb-tab ' + (filterGrade === 'ALL' ? 'active' : '') + '" onclick="renderLeaderboardFilter(\'ALL\')">全部</button>';
+  for (var i = 0; i < GRADES.length; i++) {
+    html += '<button class="lb-tab ' + (filterGrade === GRADES[i].id ? 'active' : '') + '" onclick="renderLeaderboardFilter(\'' + GRADES[i].id + '\')">' + GRADES[i].name + '</button>';
+  }
+  html += '</div>';
+
+  var list;
+  if (filterGrade === 'ALL') {
+    list = getLeaderboard(null);
+  } else {
+    list = getLeaderboard(filterGrade);
+  }
+
+  var currentUser = gCurrentUser;
+
+  if (list.length === 0) {
+    html += '<div class="lb-empty">還沒有排行榜資料，快去答題累積星星吧！⭐</div>';
+  } else {
+    html += '<div class="lb-list">';
+    for (var i = 0; i < list.length; i++) {
+      var entry = list[i];
+      var rank = i + 1;
+      var isYou = entry.username === currentUser;
+
+      var detailText = '';
+      if (filterGrade === 'ALL') {
+        var parts = [];
+        for (var j = 0; j < GRADES.length; j++) {
+          var gStars = getUserGradeStars(entry.username, GRADES[j].id);
+          if (gStars > 0) parts.push(GRADES[j].name + ':' + gStars + '⭐');
+        }
+        detailText = parts.length > 0 ? parts.join(' · ') : '還沒開始挑戰';
+      } else {
+        var gradeInfo = GRADES.find(function(g) { return g.id === filterGrade; });
+        detailText = gradeInfo ? gradeInfo.name + ' · ' + gradeInfo.publisher + '版' : '';
+      }
+
+      html += '<div class="lb-row">';
+      html += '<div class="lb-rank r' + (rank <= 3 ? rank : '4plus') + '">' + (rank <= 3 ? (rank === 1 ? '🥇' : rank === 2 ? '🥈' : '🥉') : rank) + '</div>';
+      html += '<div class="lb-info">';
+      html += '<div class="lb-name">' + entry.username + (isYou ? '<span class="lb-you-badge">你</span>' : '') + '</div>';
+      html += '<div class="lb-detail">' + detailText + '</div>';
+      html += '</div>';
+      html += '<div class="lb-score">' + entry.stars + ' ⭐</div>';
+      html += '</div>';
+    }
+    html += '</div>';
+  }
+
+  html += '<button class="btn btn-secondary btn-small" onclick="goToGradeSelect()" style="margin-top:12px;">🏫 回到年級選擇</button>';
+  html += '</div>';
+  app.innerHTML = html;
+}
+
+function renderLeaderboardFilter(grade) {
+  var app = document.getElementById('app');
+  renderLeaderboard(app, grade);
+}
+'''
+
+# ===== GRADE DATA =====
+GRADES_JS = r'''
+const GRADES = [
+  { id:'G3', name:'三年級', publisher:'康軒', icon:'🌱', color:'#4f46e5' },
+  { id:'G4', name:'四年級', publisher:'南一', icon:'🌿', color:'#7c3aed' },
+  { id:'G5', name:'五年級', publisher:'南一', icon:'🌳', color:'#0891b2' },
+];
+
+// Per-grade chapter definitions
+const GRADE_CHAPTERS = {
+  G3: [
+    { id:1, name:'數字探險', topic:'10000以內的數', icon:'🔢', color:'#4f46e5' },
+    { id:2, name:'加減擂台', topic:'四位數的加減', icon:'➕', color:'#7c3aed' },
+    { id:3, name:'毫米世界', topic:'毫米', icon:'📏', color:'#0891b2' },
+    { id:4, name:'乘法森林', topic:'乘法', icon:'✨', color:'#dc2626' },
+    { id:5, name:'角度小鎮', topic:'角', icon:'📐', color:'#ea580c' },
+    { id:6, name:'面積拼圖', topic:'面積', icon:'🟩', color:'#2563eb' },
+    { id:7, name:'除法海盜', topic:'除法', icon:'⚔️', color:'#059669' },
+    { id:8, name:'容量實驗室', topic:'公升和毫升', icon:'🧪', color:'#d97706' },
+    { id:9, name:'分數王國', topic:'分數', icon:'🍕', color:'#ec4899' },
+    { id:0, name:'綜合挑戰', topic:'複習', icon:'🏆', color:'#ef4444' },
+  ],
+  G4: [
+    { id:1, name:'大數探險', topic:'一億以內的數', icon:'🔢', color:'#4f46e5' },
+    { id:2, name:'乘法魔法', topic:'乘法', icon:'✨', color:'#7c3aed' },
+    { id:3, name:'角度測量', topic:'角度', icon:'📐', color:'#0891b2' },
+    { id:4, name:'除法挑戰', topic:'除法', icon:'⚔️', color:'#dc2626' },
+    { id:5, name:'三角形國', topic:'三角形', icon:'🔺', color:'#ea580c' },
+    { id:6, name:'分數世界', topic:'分數', icon:'🍕', color:'#2563eb' },
+    { id:8, name:'四則迷宮', topic:'整數四則', icon:'🧮', color:'#7c3aed' },
+    { id:9, name:'小數天地', topic:'小數', icon:'💎', color:'#059669' },
+    { id:10, name:'長度探險', topic:'長度', icon:'📏', color:'#d97706' },
+    { id:0, name:'終極挑戰', topic:'綜合練習', icon:'🏆', color:'#ec4899' },
+  ],
+  G5: [
+    { id:1, name:'圖表探險', topic:'折線圖', icon:'📊', color:'#4f46e5' },
+    { id:2, name:'因數倍數', topic:'因數和倍數', icon:'🔗', color:'#7c3aed' },
+    { id:3, name:'多邊形國', topic:'多邊形', icon:'⬡', color:'#0891b2' },
+    { id:4, name:'分數魔法', topic:'擴分、約分和通分', icon:'🪄', color:'#dc2626' },
+    { id:5, name:'對稱世界', topic:'線對稱圖形', icon:'🦋', color:'#ea580c' },
+    { id:6, name:'分數加減', topic:'異分母分數的加減', icon:'🧩', color:'#2563eb' },
+    { id:7, name:'四則挑戰', topic:'整數四則計算', icon:'🧮', color:'#059669' },
+    { id:8, name:'面積大師', topic:'面積計算', icon:'📐', color:'#d97706' },
+    { id:9, name:'時光隧道', topic:'時間的乘除', icon:'⏰', color:'#ec4899' },
+    { id:10, name:'立體探險', topic:'正方體和長方體', icon:'📦', color:'#8b5cf6' },
+    { id:0, name:'綜合挑戰', topic:'綜合練習', icon:'🏆', color:'#ef4444' },
+  ],
+};
+
+function getCurrentChapters() {
+  return GRADE_CHAPTERS[gameState.currentGrade] || GRADE_CHAPTERS['G4'];
+}
+
+function getLevels(chapterId) {
+  const base = [
+    { id:1, name:'第一關', desc:'基礎練習', diff:'easy', qCount:5, time:30 },
+    { id:2, name:'第二關', desc:'進階挑戰', diff:'medium', qCount:6, time:25 },
+    { id:3, name:'第三關', desc:'高手對決', diff:'hard', qCount:7, time:20 },
+  ];
+  if (chapterId === 0) {
+    return [{ id:1, name:'綜合測驗', desc:'全範圍挑戰', diff:'hard', qCount:10, time:25 }];
+  }
+  return base;
+}
+'''
+
+# ===== GAME STATE & STORAGE =====
+GAME_STATE_JS = r'''
+// Per-user per-grade localStorage keys
+function getStorageKey() {
+  return userStorageKey(gameState.currentGrade || 'G4');
+}
+
+let state = loadState();
+
+function defaultState() {
+  return {
+    progress: {},
+    totalStars: 0,
+    unlockedChapter: 1,
+  };
+}
+
+function loadState() {
+  try {
+    const saved = localStorage.getItem(getStorageKey());
+    if (saved) return JSON.parse(saved);
+  } catch(e) {}
+  return defaultState();
+}
+
+function saveState() {
+  localStorage.setItem(getStorageKey(), JSON.stringify(state));
+}
+
+function getLevelProgress(chapterId, levelId) {
+  return state.progress[chapterId]?.[levelId] || null;
+}
+
+function getChapterStars(chapterId) {
+  let total = 0;
+  const levels = getLevels(chapterId);
+  for (const lv of levels) {
+    const p = getLevelProgress(chapterId, lv.id);
+    if (p) total += p.stars;
+  }
+  return total;
+}
+
+function getMaxChapterStars(chapterId) {
+  return getLevels(chapterId).length * 3;
+}
+
+function isChapterUnlocked(chapterId) {
+  if (chapterId === 1) return true;
+  if (chapterId === 0) {
+    const chapters = getCurrentChapters();
+    let chWithStars = 0;
+    for (const ch of chapters) {
+      if (ch.id !== 0 && getChapterStars(ch.id) >= 1) chWithStars++;
+    }
+    return chWithStars >= 5;
+  }
+  const prevStars = getChapterStars(chapterId - 1);
+  return prevStars >= 1;
+}
+
+function isLevelUnlocked(chapterId, levelId) {
+  if (levelId === 1) return true;
+  const prev = getLevelProgress(chapterId, levelId - 1);
+  return prev && prev.completed;
+}
+'''
+
+# ===== UTILITY FUNCTIONS =====
+UTIL_JS = r'''
+function rand(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
+function shuffle(arr) { for(let i=arr.length-1;i>0;i--){ const j=rand(0,i); [arr[i],arr[j]]=[arr[j],arr[i]]; } return arr; }
+
+function generateDistractors(correct, min, max, count) {
+  count = count || 3;
+  const set = new Set([correct]);
+  let attempts = 0;
+  while (set.size < count + 1 && attempts < 100) {
+    let d = rand(Math.max(min, correct - Math.abs(max-min)), Math.min(max, correct + Math.abs(max-min)));
+    if (d !== correct) set.add(d);
+    attempts++;
+  }
+  const arr = [...set];
+  return arr.filter(function(x) { return x !== correct; });
+}
+'''
+
+# ===== QUESTION GENERATORS =====
+
+# ---- G3 Question Generators (Grade 3, 康軒) ----
+G3_GENERATORS_JS = r'''
+// ===== G3: 三年級 康軒 =====
+function numToChinese3(n) {
+  if (n === 0) return '零';
+  const digits = ['', '十', '百', '千'];
+  const nums = ['零', '一', '二', '三', '四', '五', '六', '七', '八', '九'];
+  let s = n.toString();
+  let result = '';
+  for (let d = 0; d < s.length; d++) {
+    const digit = parseInt(s[d]);
+    const pos = s.length - 1 - d;
+    if (digit > 0) {
+      result += nums[digit] + digits[pos];
+    } else if (result.length > 0 && d < s.length - 1 && parseInt(s[d+1]) > 0) {
+      result += '零';
+    }
+  }
+  if (result.startsWith('一十')) result = result.substring(1);
+  return result || '零';
+}
+
+// G3 Ch1: 10000以內的數
+function g3q1_readNumber() {
+  const n = rand(100, 9999);
+  const correct = numToChinese3(n);
+  const opts = [correct];
+  while (opts.length < 4) {
+    const n2 = n + rand(-500, 500);
+    if (n2 > 0 && n2 !== n) {
+      const cn = numToChinese3(n2);
+      if (!opts.includes(cn)) opts.push(cn);
+    }
+  }
+  return { text: '「' + n.toLocaleString() + '」讀作什麼？', options: shuffle(opts), correct: correct, type: 'choice' };
+}
+
+function g3q1_writeNumber() {
+  const n = rand(100, 9999);
+  const correct = n.toString();
+  const opts = [correct];
+  while (opts.length < 4) {
+    const d = n + rand(-1000, 1000);
+    if (d > 0 && d !== n) { const ds = d.toString(); if (!opts.includes(ds)) opts.push(ds); }
+  }
+  return { text: '「' + numToChinese3(n) + '」記作什麼？', options: shuffle(opts), correct: correct, type: 'choice' };
+}
+
+function g3q1_compare() {
+  const a = rand(100, 9999), b = rand(100, 9999);
+  let correct = a > b ? '＞' : (a < b ? '＜' : '＝');
+  return { text: a.toLocaleString() + ' □ ' + b.toLocaleString() + '，□中應填入？', options: shuffle(['＞','＜','＝']), correct: correct, type: 'choice' };
+}
+
+function g3q1_placeValue() {
+  const n = rand(100, 9999);
+  const places = ['個位','十位','百位','千位'];
+  const idx = rand(0, 3);
+  const s = n.toString();
+  const correct = s[s.length - 1 - idx];
+  const opts = [correct];
+  while (opts.length < 4) { const d = rand(0,9).toString(); if (!opts.includes(d)) opts.push(d); }
+  return { text: n.toLocaleString() + ' 的「' + places[idx] + '」數字是多少？', options: shuffle(opts), correct: correct, type: 'choice' };
+}
+
+function g3q1_sequence() {
+  const step = [1, 10, 100, 1000][rand(0,3)];
+  const start = rand(1, 50) * step;
+  const pos = rand(0, 3);
+  const correct = (start + step * pos).toLocaleString();
+  const seq = [];
+  for (let i = 0; i < 5; i++) {
+    if (i === pos) seq.push('？');
+    else seq.push((start + step * i).toLocaleString());
+  }
+  const opts = [correct];
+  while (opts.length < 4) { const d = (start + step * rand(0,6)).toLocaleString(); if (!opts.includes(d)) opts.push(d); }
+  return { text: '請找出規律：' + seq.join(', ') + '，？應該是多少？', options: shuffle(opts), correct: correct, type: 'choice' };
+}
+
+// G3 Ch2: 四位數的加減
+function g3q2_add() {
+  const a = rand(100, 5000), b = rand(100, 5000);
+  const correct = (a + b).toString();
+  return { text: a.toLocaleString() + ' + ' + b.toLocaleString() + ' = ？', options: shuffle([correct].concat(generateDistractors(a+b, (a+b)*0.5, (a+b)*1.5, 3))), correct: correct, type: 'choice' };
+}
+
+function g3q2_subtract() {
+  const a = rand(1000, 9999), b = rand(100, a-100);
+  const correct = (a - b).toString();
+  return { text: a.toLocaleString() + ' − ' + b.toLocaleString() + ' = ？', options: shuffle([correct].concat(generateDistractors(a-b, (a-b)*0.5, (a-b)*1.5, 3))), correct: correct, type: 'choice' };
+}
+
+function g3q2_wordProblem() {
+  const ps = [
+    function(){ var a=rand(200,3000),b=rand(100,2000); return {text:'小明有'+a.toLocaleString()+'元，媽媽再給他'+b.toLocaleString()+'元，共有幾元？',a:a,b:b,op:'+'}; },
+    function(){ var a=rand(500,5000),b=rand(100,a-100); return {text:'書店原有'+a.toLocaleString()+'本書，賣出'+b.toLocaleString()+'本，還剩幾本？',a:a,b:b,op:'-'}; },
+    function(){ var a=rand(1000,6000),b=rand(500,2000); return {text:'甲地到乙地'+a.toLocaleString()+'公尺，比乙地到丙地多'+b.toLocaleString()+'公尺，乙地到丙地幾公尺？',a:a,b:b,op:'-'}; },
+  ];
+  const p = ps[rand(0,ps.length-1)]();
+  const correct = p.op === '+' ? (p.a + p.b) : (p.a - p.b);
+  return { text: p.text, options: shuffle([correct.toString()].concat(generateDistractors(correct, correct*0.3, correct*1.7, 3))), correct: correct.toString(), type: 'choice' };
+}
+
+function g3q2_estimate() {
+  const a = rand(1500, 4500), b = rand(1500, 4500);
+  const correct = Math.round((a+b)/1000)*1000;
+  return { text: a.toLocaleString() + ' + ' + b.toLocaleString() + '，大約是幾千？', options: shuffle([correct.toString()].concat(generateDistractors(correct, correct-3000, correct+3000, 3))), correct: correct.toString(), type: 'choice' };
+}
+
+// G3 Ch3: 毫米
+function g3q3_mmToCm() {
+  const mm = rand(10, 200);
+  const cm = mm / 10;
+  let correct;
+  if (mm % 10 === 0) correct = cm + ' 公分';
+  else correct = Math.floor(cm) + ' 公分 ' + (mm % 10) + ' 毫米';
+  return { text: mm + ' 毫米 = ？公分？毫米', options: shuffle([
+    correct,
+    Math.floor(cm) + ' 公分 ' + rand(0,9) + ' 毫米',
+    Math.floor(cm+rand(-2,2)||1) + ' 公分 ' + rand(0,9) + ' 毫米',
+    Math.floor(cm+rand(-3,3)||1) + ' 公分',
+  ].filter(function(v,i,a){return a.indexOf(v)===i}).slice(0,4)), correct: correct, type: 'choice' };
+}
+
+function g3q3_cmToMm() {
+  const cm = rand(1, 30);
+  const correct = (cm * 10).toString();
+  return { text: cm + ' 公分 = ？毫米', options: shuffle([correct].concat(generateDistractors(cm*10, cm, cm*50, 3))), correct: correct, type: 'choice' };
+}
+
+function g3q3_lengthAdd() {
+  const cm1 = rand(1, 15), mm1 = rand(0, 9);
+  const cm2 = rand(1, 15), mm2 = rand(0, 9);
+  let totalMm = cm1*10 + mm1 + cm2*10 + mm2;
+  const totalCm = Math.floor(totalMm/10);
+  totalMm = totalMm % 10;
+  let correct;
+  if (totalMm === 0) correct = totalCm + ' 公分';
+  else correct = totalCm + ' 公分 ' + totalMm + ' 毫米';
+  return { text: cm1+'公分'+mm1+'毫米 + '+cm2+'公分'+mm2+'毫米 = ？', options: shuffle([
+    correct,
+    (totalCm+rand(-2,2)||1)+'公分'+rand(0,9)+'毫米',
+    (totalCm+rand(-1,3))+'公分'+rand(0,9)+'毫米',
+    totalCm+'公分',
+  ].filter(function(v,i,a){return a.indexOf(v)===i}).slice(0,4)), correct: correct, type: 'choice' };
+}
+
+// G3 Ch4: 乘法
+function g3q4_multiply() {
+  const a = rand(10, 99), b = rand(2, 9);
+  const correct = (a * b).toString();
+  return { text: a + ' × ' + b + ' = ？', options: shuffle([correct].concat(generateDistractors(a*b, a*b*0.5, a*b*1.5, 3))), correct: correct, type: 'choice' };
+}
+
+function g3q4_wordProblem() {
+  const ps = [
+    function(){ var a=rand(8,30),b=rand(2,9); return {text:'一枝筆'+a+'元，買'+b+'枝共要幾元？',a:a,b:b}; },
+    function(){ var a=rand(10,50),b=rand(2,9); return {text:'一盒有'+a+'個，買'+b+'盒共有幾個？',a:a,b:b}; },
+    function(){ var a=rand(5,40),b=rand(2,9); return {text:'每天存'+a+'元，'+b+'天共存幾元？',a:a,b:b}; },
+  ];
+  const p = ps[rand(0,ps.length-1)]();
+  const correct = p.a * p.b;
+  return { text: p.text, options: shuffle([correct.toString()].concat(generateDistractors(correct, p.a, p.a*p.b*2, 3))), correct: correct.toString(), type: 'choice' };
+}
+
+function g3q4_twoDigit() {
+  const a = rand(10, 50), b = rand(11, 30);
+  const correct = (a * b).toString();
+  return { text: a + ' × ' + b + ' = ？', options: shuffle([correct].concat(generateDistractors(a*b, a*b*0.3, a*b*1.7, 3))), correct: correct, type: 'choice' };
+}
+
+// G3 Ch5: 角
+function g3q5_angleType() {
+  const angles = [
+    { type:'銳角', desc:'小於90°', range:[1,89] },
+    { type:'直角', desc:'等於90°', range:[90,90] },
+    { type:'鈍角', desc:'大於90°且小於180°', range:[91,179] },
+  ];
+  const a = angles[rand(0,2)];
+  const val = rand(a.range[0], a.range[1]);
+  return { text: val + '° 是什麼角？', options: shuffle(['銳角', '直角', '鈍角']), correct: a.type, type: 'choice' };
+}
+
+function g3q5_rightAngle() {
+  const qs = [
+    { text:'三角板上的直角是幾度？', correct:'90' },
+    { text:'正方形的一個角是幾度？', correct:'90' },
+    { text:'長方形的四個角都是什麼角？', correct:'直角' },
+    { text:'直角是幾度？', correct:'90' },
+  ];
+  const q = qs[rand(0, qs.length-1)];
+  let opts;
+  if (q.correct === '90') opts = shuffle(['90', '60', '45', '180']);
+  else opts = shuffle(['直角', '銳角', '鈍角', '平角']);
+  return { text: q.text, options: opts, correct: q.correct, type: 'choice' };
+}
+
+function g3q5_angleCompare() {
+  const a = rand(10, 170), b = rand(10, 170);
+  let correct = a > b ? '＞' : (a < b ? '＜' : '＝');
+  return { text: a + '° □ ' + b + '°，□中應填入？', options: shuffle(['＞','＜','＝']), correct: correct, type: 'choice' };
+}
+
+// G3 Ch6: 面積 (counting unit squares)
+function g3q6_countSquares() {
+  const w = rand(2, 8), h = rand(2, 8);
+  const correct = (w * h).toString();
+  const distract = (w * h + rand(-3,3) || w*h+1).toString();
+  return { text: '一個長方形長' + w + '公分、寬' + h + '公分，用1平方公分的小正方形拼，需要幾個？', options: shuffle([correct].concat(generateDistractors(w*h, 1, w*h*2, 3))), correct: correct, type: 'choice' };
+}
+
+function g3q6_areaCalc() {
+  const w = rand(2, 10), h = rand(2, 10);
+  const correct = (w * h).toString();
+  return { text: '長方形長' + w + '公分、寬' + h + '公分，面積是幾平方公分？', options: shuffle([correct].concat(generateDistractors(w*h, 1, w*h*2, 3))), correct: correct, type: 'choice' };
+}
+
+function g3q6_perimeter() {
+  const w = rand(2, 10), h = rand(2, 10);
+  const correct = ((w+h)*2).toString();
+  return { text: '長方形長' + w + '公分、寬' + h + '公分，周長是幾公分？', options: shuffle([correct].concat(generateDistractors((w+h)*2, 2, (w+h)*4, 3))), correct: correct, type: 'choice' };
+}
+
+// G3 Ch7: 除法
+function g3q7_divide() {
+  const b = rand(2, 9), q = rand(10, 99);
+  const a = b * q;
+  const correct = q.toString();
+  return { text: a + ' ÷ ' + b + ' = ？', options: shuffle([correct].concat(generateDistractors(q, q-30, q+30, 3))), correct: correct, type: 'choice' };
+}
+
+function g3q7_divideRemainder() {
+  const b = rand(3, 9), q = rand(10, 50), r = rand(1, b-1);
+  const a = b * q + r;
+  const correct = q + '...' + r;
+  return { text: a + ' ÷ ' + b + ' = ？', options: shuffle([correct, q+1||q+'...'+rand(1,b-1), (q-1||1)+'...'+rand(1,b-1), q+'...'+(r+1<b?r+1:r-1)].filter(function(v,i,a){return a.indexOf(v)===i}).slice(0,4)), correct: correct, type: 'choice' };
+}
+
+function g3q7_wordProblemDiv() {
+  const ps = [
+    function(){ var a=rand(50,200),b=rand(2,9); return {text:'把'+a+'顆糖果平分給'+b+'個人，每人得幾顆？',a:a,b:b}; },
+    function(){ var a=rand(20,100),b=rand(3,9); return {text:a+'個小朋友去露營，每'+b+'人一頂帳篷，需要幾頂？',a:a,b:b}; },
+  ];
+  const p = ps[rand(0,ps.length-1)]();
+  const q = Math.floor(p.a / p.b), r = p.a % p.b;
+  const correct = r === 0 ? q.toString() : q + '...' + r;
+  return { text: p.text, options: shuffle([correct, (q+1).toString(), (q-1||1).toString(), q+'...'+(r+1<p.b?r+1:r-1||1)].filter(function(v,i,a){return a.indexOf(v)===i}).slice(0,4)), correct: correct, type: 'choice' };
+}
+
+// G3 Ch8: 公升和毫升
+function g3q8_lToMl() {
+  const l = rand(1, 20);
+  const correct = (l * 1000).toString();
+  return { text: l + ' 公升 = ？毫升', options: shuffle([correct].concat(generateDistractors(l*1000, l*10, l*5000, 3))), correct: correct, type: 'choice' };
+}
+
+function g3q8_mlToL() {
+  const ml = rand(1000, 20000);
+  const correctL = ml / 1000;
+  let correct;
+  if (ml % 1000 === 0) correct = correctL + ' 公升';
+  else correct = Math.floor(correctL) + ' 公升 ' + (ml % 1000) + ' 毫升';
+  return { text: ml.toLocaleString() + ' 毫升 = ？公升？毫升', options: shuffle([correct, Math.floor(correctL+rand(-2,2)||1)+'公升'+rand(0,999)+'毫升', Math.floor(correctL)+'公升'+rand(0,999)+'毫升', Math.floor(correctL+1)+'公升'].filter(function(v,i,a){return a.indexOf(v)===i}).slice(0,4)), correct: correct, type: 'choice' };
+}
+
+function g3q8_capacityCompare() {
+  const a = rand(100, 5000), b = rand(100, 5000);
+  let correct = a > b ? '＞' : (a < b ? '＜' : '＝');
+  return { text: a.toLocaleString() + ' 毫升 □ ' + b.toLocaleString() + ' 毫升，□中應填入？', options: shuffle(['＞','＜','＝']), correct: correct, type: 'choice' };
+}
+
+// G3 Ch9: 分數 (basic)
+function g3q9_fractionRead() {
+  const denoms = [2,3,4,5,6,8];
+  const d = denoms[rand(0, denoms.length-1)];
+  const n = rand(1, d);
+  const readings = {2:'二',3:'三',4:'四',5:'五',6:'六',8:'八'};
+  const correct = n + '/' + d;
+  const readAs = readings[n] + '分之' + readings[d];
+  return { text: readAs + ' 用分數記作什麼？', options: shuffle([correct, rand(1,d)+'/'+d, n+'/'+rand(2,8), rand(1,8)+'/'+rand(2,8)].filter(function(v,i,a){return a.indexOf(v)===i}).slice(0,4)), correct: correct, type: 'choice' };
+}
+
+function g3q9_fractionCompare() {
+  const d = [2,3,4,5,6,8][rand(0,5)];
+  const a = rand(1, d-1), b = rand(1, d-1);
+  let correct = a > b ? '＞' : (a < b ? '＜' : '＝');
+  return { text: a + '/' + d + ' □ ' + b + '/' + d + '，□中應填入？', options: shuffle(['＞','＜','＝']), correct: correct, type: 'choice' };
+}
+
+function g3q9_fractionOfSet() {
+  const total = [12,15,16,18,20,24][rand(0,5)];
+  const denom = [2,3,4,6][rand(0,3)];
+  const n = rand(1, denom-1);
+  const correct = (total / denom * n).toString();
+  return { text: '一盒有' + total + '顆糖果，' + n + '/' + denom + ' 盒有幾顆？', options: shuffle([correct].concat(generateDistractors(total/denom*n, 1, total, 3))), correct: correct, type: 'choice' };
+}
+
+const G3_GENERATORS = {
+  1: [g3q1_readNumber, g3q1_writeNumber, g3q1_compare, g3q1_placeValue, g3q1_sequence],
+  2: [g3q2_add, g3q2_subtract, g3q2_wordProblem, g3q2_estimate, g3q2_add],
+  3: [g3q3_mmToCm, g3q3_cmToMm, g3q3_lengthAdd, g3q3_mmToCm, g3q3_cmToMm],
+  4: [g3q4_multiply, g3q4_wordProblem, g3q4_twoDigit, g3q4_multiply, g3q4_wordProblem],
+  5: [g3q5_angleType, g3q5_rightAngle, g3q5_angleCompare, g3q5_angleType, g3q5_rightAngle],
+  6: [g3q6_countSquares, g3q6_areaCalc, g3q6_perimeter, g3q6_countSquares, g3q6_areaCalc],
+  7: [g3q7_divide, g3q7_divideRemainder, g3q7_wordProblemDiv, g3q7_divide, g3q7_divideRemainder],
+  8: [g3q8_lToMl, g3q8_mlToL, g3q8_capacityCompare, g3q8_lToMl, g3q8_mlToL],
+  9: [g3q9_fractionRead, g3q9_fractionCompare, g3q9_fractionOfSet, g3q9_fractionRead, g3q9_fractionCompare],
+  0: function() {
+    const all = [
+      g3q1_readNumber,g3q2_add,g3q3_mmToCm,g3q4_multiply,g3q5_angleType,
+      g3q6_areaCalc,g3q7_divide,g3q8_lToMl,g3q9_fractionRead
+    ];
+    return all[rand(0, all.length-1)]();
+  }
+};
+'''
+
+# ---- G4 Question Generators (Grade 4, 南一) - Copy existing ----
+G4_GENERATORS_JS = r'''
+// ===== G4: 四年級 南一 =====
+function numToChinese4(n) {
+  if (n === 0) return '零';
+  const units = ['', '萬', '億'];
+  const digits = ['', '十', '百', '千'];
+  const nums = ['零', '一', '二', '三', '四', '五', '六', '七', '八', '九'];
+  let s = n.toString();
+  while (s.length % 4 !== 0) s = '0' + s;
+  const groups = [];
+  for (let i = 0; i < s.length; i += 4) groups.push(s.substring(i, i + 4));
+  let result = '';
+  for (let g = 0; g < groups.length; g++) {
+    const grp = groups[g];
+    let part = '';
+    for (let d = 0; d < 4; d++) {
+      const digit = parseInt(grp[d]);
+      if (digit > 0) part += nums[digit] + digits[3 - d];
+      else if (part.length > 0 && d < 3 && parseInt(grp[d + 1]) > 0) part += '零';
+    }
+    if (part.startsWith('一十')) part = part.substring(1);
+    if (part.length > 0) result += part + (groups.length - 1 - g > 0 ? units[groups.length - 1 - g] : '');
+    else if (g === groups.length - 1 && result === '') result = '零';
+  }
+  return result || '零';
+}
+
+function g4q1_readNumber() {
+  const n = rand(1000, 99999999);
+  const correct = numToChinese4(n);
+  const opts = [correct];
+  while (opts.length < 4) {
+    const n2 = n + rand(-50000, 50000);
+    if (n2 > 0 && n2 !== n) { const cn = numToChinese4(n2); if (!opts.includes(cn)) opts.push(cn); }
+  }
+  return { text: '「' + n.toLocaleString() + '」讀作什麼？', options: shuffle(opts), correct: correct, type: 'choice' };
+}
+
+function g4q1_writeNumber() {
+  const n = rand(1000, 99999999);
+  const correct = n.toString();
+  const opts = [correct];
+  while (opts.length < 4) {
+    const d = n + rand(-100000, 100000);
+    if (d > 0 && d !== n) { const ds = d.toString(); if (!opts.includes(ds)) opts.push(ds); }
+  }
+  return { text: '「' + numToChinese4(n) + '」記作什麼？', options: shuffle(opts), correct: correct, type: 'choice' };
+}
+
+function g4q1_compare() {
+  const a = rand(1000, 99999999), b = rand(1000, 99999999);
+  let correct = a > b ? '＞' : (a < b ? '＜' : '＝');
+  return { text: a.toLocaleString() + ' □ ' +  b.toLocaleString() + '，□中應填入？', options: shuffle(['＞','＜','＝']), correct: correct, type: 'choice' };
+}
+
+function g4q1_placeValue() {
+  const n = rand(100000, 99999999);
+  const places = ['個位','十位','百位','千位','萬位','十萬位','百萬位','千萬位'];
+  const idx = rand(0, 7);
+  const s = n.toString().padStart(8, '0');
+  const correct = s[s.length - 1 - idx];
+  const opts = [correct];
+  while(opts.length < 4) { const d = rand(0,9).toString(); if(!opts.includes(d)) opts.push(d); }
+  return { text: n.toLocaleString() + ' 的「' + places[idx] + '」數字是多少？', options: shuffle(opts), correct: correct, type: 'choice' };
+}
+
+function g4q1_sequence() {
+  const step = [1000, 10000, 100000, 1000000][rand(0,3)];
+  const start = rand(1, 50) * step;
+  const pos = rand(0, 3);
+  const correct = (start + step * pos).toLocaleString();
+  const seq = [];
+  for(let i=0;i<5;i++) { if(i===pos) seq.push('？'); else seq.push((start+step*i).toLocaleString()); }
+  const opts = [correct];
+  while(opts.length<4){ const d=(start+step*rand(0,6)).toLocaleString(); if(!opts.includes(d))opts.push(d); }
+  return { text: '請找出規律：' + seq.join(', ') + '，？應該是多少？', options: shuffle(opts), correct: correct, type: 'choice' };
+}
+
+function g4q2_multiply() {
+  let a, b, correct;
+  const type = rand(0, 2);
+  if(type===0){a=rand(1000,9999);b=rand(2,9);}else if(type===1){a=rand(10,99);b=rand(10,99);}else{a=rand(100,999);b=rand(10,99);}
+  correct = a * b;
+  return { text: a.toLocaleString() + ' × ' + b + ' = ？', options: shuffle([correct.toString()].concat(generateDistractors(correct, a*b*0.5, a*b*1.5, 3))), correct: correct.toString(), type: 'choice' };
+}
+
+function g4q2_wordProblem() {
+  const a = rand(8,30), b = rand(10,50);
+  const correct = a * b;
+  const ps = ['一枝筆賣'+a+'元，買'+b+'枝共要付幾元？','一輛車可坐'+a+'人，'+b+'輛車共可坐幾人？','每天存'+a+'元，'+b+'天共存幾元？','一盒有'+a+'個，買'+b+'盒共有幾個？'];
+  return { text: ps[rand(0,ps.length-1)], options: shuffle([correct.toString()].concat(generateDistractors(correct, a, a*b*2, 3))), correct: correct.toString(), type: 'choice' };
+}
+
+function g4q3_angleType() {
+  const val = rand(1,179);
+  let correct;
+  if(val<90)correct='銳角';else if(val===90)correct='直角';else correct='鈍角';
+  return { text: val + '° 是什麼角？', options: shuffle(['銳角','直角','鈍角']), correct: correct, type: 'choice' };
+}
+
+function g4q3_angleCalc() {
+  const a = rand(20,60), b = rand(20,60);
+  const correct = (a+b).toString();
+  return { text: '一個角是'+a+'°，另一個角是'+b+'°，合起來是幾度？', options: shuffle([correct].concat(generateDistractors(a+b, 30, 180, 3))), correct: correct, type: 'choice' };
+}
+
+function g4q3_clockAngle() {
+  const start = rand(1,12), end = rand(1,12);
+  let diff = end - start; if(diff<=0)diff+=12;
+  const correct = (diff*30).toString();
+  return { text: '時鐘指針從數字'+start+'順時針轉到數字'+end+'，轉了幾度？', options: shuffle([correct].concat(generateDistractors(diff*30, 30, 360, 3))), correct: correct, type: 'choice' };
+}
+
+function g4q4_divide() {
+  const b = rand(2,9), q = rand(100,999);
+  const a = b * q;
+  return { text: a.toLocaleString() + ' ÷ ' + b + ' = ？', options: shuffle([q.toString()].concat(generateDistractors(q, q-50, q+50, 3))), correct: q.toString(), type: 'choice' };
+}
+
+function g4q4_divide2d() {
+  const b = rand(11,50), q = rand(5,30);
+  const a = b * q + rand(0, b-1);
+  const r = a % b, qq = Math.floor(a / b);
+  let correct = r === 0 ? qq.toString() : qq + '...' + r;
+  return { text: a + ' ÷ ' + b + ' = ？', options: shuffle([correct, (qq+1||qq)+'...'+rand(0,b-1), (qq-1||1)+'...'+rand(0,b-1), rand(qq-2,qq+2).toString()].filter(function(v,i,a){return a.indexOf(v)===i}).slice(0,4)), correct: correct, type: 'choice' };
+}
+
+function g4q4_divide3d() {
+  const b = rand(11,30), q = rand(10,50);
+  const a = b * q + rand(0, b-1);
+  const r = a % b, qq = Math.floor(a / b);
+  let correct = r === 0 ? qq.toString() : qq + '...' + r;
+  return { text: a + ' ÷ ' + b + ' = ？', options: shuffle([correct, r===0?(qq+1).toString():(qq+'...'+(r+1<b?r+1:r-1)), (qq+rand(-2,2)).toString(), (qq+rand(-3,3))+'...'+rand(1,b-1)].filter(function(v,i,a){return a.indexOf(v)===i}).slice(0,4)), correct: correct, type: 'choice' };
+}
+
+function g4q5_triangleBySide() {
+  const qs = [
+    { text:'三個邊都等長的三角形叫什麼？', correct:'正三角形', opts:shuffle(['正三角形','等腰三角形','直角三角形','鈍角三角形']) },
+    { text:'有兩個邊等長的三角形叫什麼？', correct:'等腰三角形', opts:shuffle(['等腰三角形','正三角形','直角三角形','銳角三角形']) },
+    { text:'正三角形的三個角各是幾度？', correct:'60', opts:shuffle(['60','90','45','30']) },
+    { text:'等腰三角形的兩個底角有什麼關係？', correct:'一樣大', opts:shuffle(['一樣大','不一樣大','底角較大','頂角較大']) },
+  ];
+  const q = qs[rand(0, qs.length-1)];
+  return { text: q.text, options: q.opts, correct: q.correct, type: 'choice' };
+}
+
+function g4q5_triangleByAngle() {
+  const qs = [
+    { text:'有一個直角和兩個銳角的三角形叫什麼？', correct:'直角三角形', opts:shuffle(['直角三角形','鈍角三角形','銳角三角形','等腰三角形']) },
+    { text:'有一個鈍角和兩個銳角的三角形叫什麼？', correct:'鈍角三角形', opts:shuffle(['直角三角形','鈍角三角形','銳角三角形','等腰三角形']) },
+    { text:'三個角都是銳角的三角形叫什麼？', correct:'銳角三角形', opts:shuffle(['直角三角形','鈍角三角形','銳角三角形','等腰三角形']) },
+    { text:'等腰直角三角形的兩個底角各是幾度？', correct:'45', opts:shuffle(['45','60','30','90']) },
+  ];
+  const q = qs[rand(0, qs.length-1)];
+  return { text: q.text, options: q.opts, correct: q.correct, type: 'choice' };
+}
+
+function g4q6_fractionType() {
+  const qs = [
+    { text:'分子比分母小的分數叫什麼？', correct:'真分數' },
+    { text:'分子比分母大或等於的分數叫什麼？', correct:'假分數' },
+    { text:'帶有整數和真分數的分數叫什麼？', correct:'帶分數' },
+  ];
+  const q = qs[rand(0, qs.length-1)];
+  return { text: q.text, options: shuffle(['真分數','假分數','帶分數']), correct: q.correct, type: 'choice' };
+}
+
+function g4q6_compareFraction() {
+  const denom = [4,5,6,8,10][rand(0,4)];
+  const a = rand(1, denom*2-1), b = rand(1, denom*2-1);
+  let correct = a > b ? '＞' : (a < b ? '＜' : '＝');
+  return { text: a + '/' + denom + ' □ ' + b + '/' + denom + '，□中應填入？', options: shuffle(['＞','＜','＝']), correct: correct, type: 'choice' };
+}
+
+function g4q6_fractionConvert() {
+  const a = rand(1, 5), b = rand(1, 7), d = rand(b+1, 10);
+  const correct = (a * d + b).toString();
+  return { text: '帶分數 ' + a + '又' + b + '/' + d + ' 等於假分數幾分之幾？（填分子）', options: shuffle([correct].concat(generateDistractors(a*d+b, a*d, a*d+b+b, 3))), correct: correct, type: 'choice' };
+}
+
+function g4q8_orderOfOps() {
+  const a = rand(100,500), b = rand(100,500), c = rand(100,500);
+  const correct = (a + b + c).toString();
+  return { text: a + ' + ' + b + ' + ' + c + ' = ？', options: shuffle([correct].concat(generateDistractors(a+b+c, a+b+c-200, a+b+c+200, 3))), correct: correct, type: 'choice' };
+}
+
+function g4q8_wordProblem() {
+  const ps = [
+    function(){var a=rand(200,500),b=rand(200,500),c=rand(100,400);return{text:'姐姐原有'+a+'元，媽媽給她'+b+'元後，買書花了'+c+'元，還剩幾元？',correct:(a+b-c).toString()};},
+    function(){var a=rand(2000,5000),b=rand(1000,2500),c=rand(500,2000);return{text:'哥哥有'+a+'元，買球鞋花了'+b+'元，爸爸又給他'+c+'元，現在有幾元？',correct:(a-b+c).toString()};},
+  ];
+  const p = ps[rand(0,ps.length-1)]();
+  return { text: p.text, options: shuffle([p.correct].concat(generateDistractors(parseInt(p.correct), parseInt(p.correct)-200, parseInt(p.correct)+200, 3))), correct: p.correct, type: 'choice' };
+}
+
+function g4q9_decimalNotation() {
+  const a = rand(0, 20), b = rand(1, 99);
+  const correct = a + '.' + b.toString().padStart(2,'0');
+  return { text: a + ' 又 ' + b + ' 個 0.01 用小數記作什麼？', options: shuffle([correct, a+'.'+rand(10,99), rand(0,20)+'.'+b.toString().padStart(2,'0'), a+'.'+(b+rand(-5,5)||0).toString().padStart(2,'0')].filter(function(v,i,a){return a.indexOf(v)===i}).slice(0,4)), correct: correct, type: 'choice' };
+}
+
+function g4q9_decimalCompare() {
+  const a1=rand(0,10),a2=rand(0,99),b1=rand(0,10),b2=rand(0,99);
+  const a = a1 + a2/100, b = b1 + b2/100;
+  let correct = a > b ? '＞' : (a < b ? '＜' : '＝');
+  return { text: a1 + '.' + a2.toString().padStart(2,'0') + ' □ ' + b1 + '.' + b2.toString().padStart(2,'0') + '，□中應填入？', options: shuffle(['＞','＜','＝']), correct: correct, type: 'choice' };
+}
+
+function g4q9_lengthDecimal() {
+  const cm = rand(1, 500);
+  const correct = (cm / 100).toString();
+  return { text: cm + ' 公分 = ？公尺（用小數表示）', options: shuffle([correct, (cm/10).toString(), (cm/100+rand(-0.5,0.5)).toFixed(2), (cm/100+rand(0.1,2)).toFixed(2)].filter(function(v,i,a){return a.indexOf(v)===i}).slice(0,4)), correct: correct, type: 'choice' };
+}
+
+function g4q10_kmToM() {
+  const km = rand(1, 50);
+  const correct = (km * 1000).toString();
+  return { text: km + ' 公里 = ？公尺', options: shuffle([correct].concat(generateDistractors(km*1000, km*100, km*5000, 3))), correct: correct, type: 'choice' };
+}
+
+function g4q10_mToKm() {
+  const m = rand(1000, 50000);
+  const correct = (m / 1000).toString();
+  return { text: m.toLocaleString() + ' 公尺 = ？公里', options: shuffle([correct, (m/100).toString(), (m/10000).toString(), (m/1000+rand(1,5)).toString()].filter(function(v,i,a){return a.indexOf(v)===i}).slice(0,4)), correct: correct, type: 'choice' };
+}
+
+function g4q10_mixedLength() {
+  const km = rand(1, 20), m = rand(1, 999);
+  const correct = (km * 1000 + m).toString();
+  return { text: km + ' 公里 ' + m + ' 公尺 = ？公尺', options: shuffle([correct].concat(generateDistractors(km*1000+m, km*1000, km*1000+m+500, 3))), correct: correct, type: 'choice' };
+}
+
+function g4q10_lengthComparison() {
+  const a = rand(500, 5000), b = rand(500, 5000);
+  let correct = a > b ? '＞' : (a < b ? '＜' : '＝');
+  return { text: a.toLocaleString() + ' 公尺 □ ' + b.toLocaleString() + ' 公尺，□中應填入？', options: shuffle(['＞','＜','＝']), correct: correct, type: 'choice' };
+}
+
+const G4_GENERATORS = {
+  1: [g4q1_readNumber, g4q1_writeNumber, g4q1_compare, g4q1_placeValue, g4q1_sequence],
+  2: [g4q2_multiply, g4q2_multiply, g4q2_wordProblem, g4q2_multiply, g4q2_wordProblem],
+  3: [g4q3_angleType, g4q3_angleCalc, g4q3_clockAngle, g4q3_angleType, g4q3_angleType],
+  4: [g4q4_divide, g4q4_divide2d, g4q4_divide3d, g4q4_divide, g4q4_divide],
+  5: [g4q5_triangleBySide, g4q5_triangleByAngle, g4q5_triangleBySide, g4q5_triangleByAngle, g4q5_triangleByAngle],
+  6: [g4q6_fractionType, g4q6_compareFraction, g4q6_fractionConvert, g4q6_fractionType, g4q6_compareFraction],
+  8: [g4q8_orderOfOps, g4q8_orderOfOps, g4q8_wordProblem, g4q8_orderOfOps, g4q8_wordProblem],
+  9: [g4q9_decimalNotation, g4q9_decimalCompare, g4q9_lengthDecimal, g4q9_decimalNotation, g4q9_decimalCompare],
+  10: [g4q10_kmToM, g4q10_mToKm, g4q10_mixedLength, g4q10_lengthComparison, g4q10_kmToM],
+  0: function() {
+    const all = [g4q1_readNumber,g4q2_multiply,g4q3_angleType,g4q4_divide,g4q5_triangleBySide,g4q6_fractionType,g4q8_orderOfOps,g4q9_decimalNotation,g4q10_kmToM];
+    return all[rand(0, all.length-1)]();
+  }
+};
+'''
+
+# ---- G5 Question Generators (Grade 5, 南一) ----
+G5_GENERATORS_JS = r'''
+// ===== G5: 五年級 南一 =====
+
+// G5 Ch1: 折線圖 (reading/understanding)
+function g5q1_readGraph() {
+  const qs = [
+    { text:'折線圖的橫軸通常用來表示什麼？', correct:'時間或類別', opts:shuffle(['時間或類別','數量','溫度','百分比']) },
+    { text:'折線圖的縱軸通常用來表示什麼？', correct:'數量', opts:shuffle(['數量','時間','地點','名稱']) },
+    { text:'折線圖中，線段往上表示什麼？', correct:'增加', opts:shuffle(['增加','減少','不變','結束']) },
+    { text:'折線圖中，線段往下表示什麼？', correct:'減少', opts:shuffle(['減少','增加','不變','開始']) },
+    { text:'折線圖中，線段是平的表示什麼？', correct:'沒有變化', opts:shuffle(['沒有變化','增加','減少','結束']) },
+  ];
+  const q = qs[rand(0, qs.length-1)];
+  return { text: q.text, options: q.opts, correct: q.correct, type: 'choice' };
+}
+
+function g5q1_graphCompare() {
+  const a = rand(20, 100), b = rand(20, 100);
+  let correct = a > b ? '甲' : (a < b ? '乙' : '一樣多');
+  return { text: '長條圖中，甲項目有' + a + '，乙項目有' + b + '，哪個項目比較多？', options: shuffle(['甲','乙','一樣多']), correct: correct, type: 'choice' };
+}
+
+function g5q1_dataInterpret() {
+  const vals = [rand(10,50), rand(10,50), rand(10,50), rand(10,50), rand(10,50)];
+  const max = Math.max.apply(null, vals);
+  const month = vals.indexOf(max) + 1;
+  return { text: '1~5月的銷售量分別是：' + vals.join('、') + '，哪個月的銷售量最高？', options: shuffle([month+'月', (month%5+1)+'月', ((month+1)%5+1)+'月']), correct: month+'月', type: 'choice' };
+}
+
+// G5 Ch2: 因數和倍數
+function g5q2_factor() {
+  const n = [12, 15, 18, 20, 24, 28, 30, 36, 40, 42, 48][rand(0,10)];
+  // Find all factors
+  const factors = [];
+  for (let i = 1; i <= n; i++) { if (n % i === 0) factors.push(i); }
+  const correct = factors[rand(0, factors.length-1)].toString();
+  const opts = [correct];
+  while (opts.length < 4) {
+    const d = rand(1, n);
+    if (n % d !== 0) { const ds = d.toString(); if (!opts.includes(ds)) opts.push(ds); }
+  }
+  return { text: '下列哪一個是 ' + n + ' 的因數？', options: shuffle(opts), correct: correct, type: 'choice' };
+}
+
+function g5q2_multiple() {
+  const n = rand(3, 12);
+  const correct = (n * rand(2, 12)).toString();
+  const opts = [correct];
+  while (opts.length < 4) {
+    const d = n * rand(13, 20) + rand(1, n-1);
+    const ds = d.toString();
+    if (!opts.includes(ds)) opts.push(ds);
+  }
+  return { text: '下列哪一個是 ' + n + ' 的倍數？', options: shuffle(opts), correct: correct, type: 'choice' };
+}
+
+function g5q2_gcf() {
+  const pairs = [
+    { a:12, b:18, gcf:6 }, { a:15, b:25, gcf:5 }, { a:24, b:36, gcf:12 },
+    { a:16, b:40, gcf:8 }, { a:18, b:30, gcf:6 }, { a:20, b:50, gcf:10 },
+    { a:28, b:42, gcf:14 }, { a:30, b:45, gcf:15 },
+  ];
+  const p = pairs[rand(0, pairs.length-1)];
+  const correct = p.gcf.toString();
+  return { text: p.a + ' 和 ' + p.b + ' 的最大公因數是多少？', options: shuffle([correct].concat(generateDistractors(p.gcf, 1, p.a, 3))), correct: correct, type: 'choice' };
+}
+
+function g5q2_lcm() {
+  const pairs = [
+    { a:6, b:8, lcm:24 }, { a:4, b:6, lcm:12 }, { a:8, b:12, lcm:24 },
+    { a:10, b:15, lcm:30 }, { a:12, b:18, lcm:36 }, { a:6, b:10, lcm:30 },
+  ];
+  const p = pairs[rand(0, pairs.length-1)];
+  const correct = p.lcm.toString();
+  return { text: p.a + ' 和 ' + p.b + ' 的最小公倍數是多少？', options: shuffle([correct].concat(generateDistractors(p.lcm, p.a, p.a*p.b, 3))), correct: correct, type: 'choice' };
+}
+
+// G5 Ch3: 多邊形
+function g5q3_polygonIdentify() {
+  const qs = [
+    { text:'有5個邊和5個角的圖形叫做什麼？', correct:'五邊形', opts:shuffle(['五邊形','四邊形','六邊形','三角形']) },
+    { text:'有6個邊和6個角的圖形叫做什麼？', correct:'六邊形', opts:shuffle(['六邊形','五邊形','七邊形','八邊形']) },
+    { text:'正多邊形中，每個邊和每個角有什麼關係？', correct:'都一樣', opts:shuffle(['都一樣','不一定','邊大角小','角大邊小']) },
+    { text:'圓形是不是多邊形？', correct:'不是', opts:shuffle(['不是','是','看大小','不一定']) },
+  ];
+  const q = qs[rand(0, qs.length-1)];
+  return { text: q.text, options: q.opts, correct: q.correct, type: 'choice' };
+}
+
+function g5q3_triangleSides() {
+  const sides = [rand(2,10), rand(2,10), rand(2,15)];
+  sides.sort(function(x,y){return x-y;});
+  const can = sides[0] + sides[1] > sides[2];
+  return { text: '三邊長為 ' + sides[0] + '、' + sides[1] + '、' + sides[2] + ' 公分，能不能排成三角形？', options: shuffle(['可以','不可以']), correct: can ? '可以' : '不可以', type: 'choice' };
+}
+
+function g5q3_interiorAngle() {
+  const qs = [
+    { text:'三角形內角和是幾度？', correct:'180' },
+    { text:'四邊形內角和是幾度？', correct:'360' },
+    { text:'五邊形內角和是幾度？', correct:'540' },
+  ];
+  const q = qs[rand(0, qs.length-1)];
+  return { text: q.text, options: shuffle([q.correct].concat(generateDistractors(parseInt(q.correct), 90, 720, 3))), correct: q.correct, type: 'choice' };
+}
+
+// G5 Ch4: 擴分、約分和通分
+function g5q4_expandFraction() {
+  const n = rand(1,5), d = rand(n+2,10);
+  const mul = rand(2,5);
+  const correct = (n*mul) + '/' + (d*mul);
+  return { text: '把 ' + n + '/' + d + ' 擴分（分子分母同乘' + mul + '）後是多少？', options: shuffle([correct, (n*mul+1)+'/'+(d*mul), (n*mul)+'/'+(d*mul+1), (n*mul-1||1)+'/'+(d*mul)].filter(function(v,i,a){return a.indexOf(v)===i}).slice(0,4)), correct: correct, type: 'choice' };
+}
+
+function g5q4_reduceFraction() {
+  const pairs = [
+    { n:4, d:8, r:'1/2' }, { n:6, d:9, r:'2/3' }, { n:8, d:12, r:'2/3' },
+    { n:10, d:15, r:'2/3' }, { n:12, d:16, r:'3/4' }, { n:15, d:20, r:'3/4' },
+    { n:9, d:12, r:'3/4' }, { n:14, d:21, r:'2/3' },
+  ];
+  const p = pairs[rand(0, pairs.length-1)];
+  return { text: '把 ' + p.n + '/' + p.d + ' 約分到最簡分數是多少？', options: shuffle([p.r, '1/3', '1/4', '2/5'].filter(function(v){return v!==p.r}).slice(0,3).concat([p.r])), correct: p.r, type: 'choice' };
+}
+
+function g5q4_compareFractions() {
+  const pairs = [
+    { a:'1/2', b:'1/3', correct:'＞' },
+    { a:'2/3', b:'3/4', correct:'＜' },
+    { a:'3/5', b:'1/2', correct:'＞' },
+    { a:'2/5', b:'1/3', correct:'＞' },
+    { a:'3/8', b:'1/4', correct:'＞' },
+  ];
+  const p = pairs[rand(0, pairs.length-1)];
+  return { text: p.a + ' □ ' + p.b + '，□中應填入？', options: shuffle(['＞','＜','＝']), correct: p.correct, type: 'choice' };
+}
+
+// G5 Ch5: 線對稱圖形
+function g5q5_symmetry() {
+  const qs = [
+    { text:'等腰三角形有幾條對稱軸？', correct:'1', opts:shuffle(['1','2','3','0']) },
+    { text:'正三角形有幾條對稱軸？', correct:'3', opts:shuffle(['3','1','2','0']) },
+    { text:'正方形有幾條對稱軸？', correct:'4', opts:shuffle(['4','2','0','1']) },
+    { text:'長方形有幾條對稱軸？', correct:'2', opts:shuffle(['2','1','4','0']) },
+    { text:'正五邊形有幾條對稱軸？', correct:'5', opts:shuffle(['5','4','3','6']) },
+    { text:'圓形是不是線對稱圖形？', correct:'是，有無限多條', opts:shuffle(['是，有無限多條','不是','是，有2條','看大小']) },
+  ];
+  const q = qs[rand(0, qs.length-1)];
+  return { text: q.text, options: q.opts, correct: q.correct, type: 'choice' };
+}
+
+function g5q5_symmetryPoint() {
+  const qs = [
+    { text:'對稱點到對稱軸的距離有什麼關係？', correct:'相等', opts:shuffle(['相等','左邊較近','右邊較近','不一定']) },
+    { text:'對稱邊的長度有什麼關係？', correct:'相等', opts:shuffle(['相等','左邊較長','右邊較長','不一定']) },
+  ];
+  const q = qs[rand(0, qs.length-1)];
+  return { text: q.text, options: q.opts, correct: q.correct, type: 'choice' };
+}
+
+// G5 Ch6: 異分母分數的加減
+function g5q6_addFractions() {
+  const pairs = [
+    { a:'1/2', b:'1/3', c:'5/6' },
+    { a:'1/3', b:'1/4', c:'7/12' },
+    { a:'1/2', b:'1/4', c:'3/4' },
+    { a:'2/3', b:'1/6', c:'5/6' },
+    { a:'1/4', b:'1/6', c:'5/12' },
+  ];
+  const p = pairs[rand(0, pairs.length-1)];
+  return { text: p.a + ' + ' + p.b + ' = ？', options: shuffle([p.c, '2/3', '3/4', '1/2'].filter(function(v){return v!==p.c}).slice(0,3).concat([p.c])), correct: p.c, type: 'choice' };
+}
+
+function g5q6_subFractions() {
+  const pairs = [
+    { a:'1/2', b:'1/3', c:'1/6' },
+    { a:'3/4', b:'1/2', c:'1/4' },
+    { a:'2/3', b:'1/6', c:'1/2' },
+    { a:'5/6', b:'1/3', c:'1/2' },
+  ];
+  const p = pairs[rand(0, pairs.length-1)];
+  return { text: p.a + ' − ' + p.b + ' = ？', options: shuffle([p.c, '1/3', '1/4', '2/3'].filter(function(v){return v!==p.c}).slice(0,3).concat([p.c])), correct: p.c, type: 'choice' };
+}
+
+function g5q6_fractionWord() {
+  const total = [12, 18, 24, 36][rand(0,3)];
+  const used = rand(1, Math.floor(total/2)-1);
+  const correct = (total - used) + '/' + total;
+  return { text: '一瓶果汁有' + total + '分之' + total + '公升，喝了' + used + '/' + total + '公升，還剩幾分之幾公升？', options: shuffle([correct, (total-used-1)+'/'+total, (total-used+1)+'/'+total, used+'/'+total].filter(function(v,i,a){return a.indexOf(v)===i}).slice(0,4)), correct: correct, type: 'choice' };
+}
+
+// G5 Ch7: 整數四則計算
+function g5q7_multiStep() {
+  const a = rand(10,50), b = rand(2,9), c = rand(10,50);
+  const correct = (a * b + c).toString();
+  return { text: a + ' × ' + b + ' + ' + c + ' = ？', options: shuffle([correct].concat(generateDistractors(a*b+c, a*b, a*b+c*2, 3))), correct: correct, type: 'choice' };
+}
+
+function g5q7_average() {
+  const n = rand(3, 5);
+  const vals = [];
+  for (let i = 0; i < n; i++) vals.push(rand(10, 100));
+  const sum = vals.reduce(function(a,b){return a+b;}, 0);
+  const correct = (sum / n).toString();
+  if (sum % n !== 0) return g5q7_average(); // re-roll for integer average
+  return { text: vals.join('、') + ' 這' + n + '個數的平均是多少？', options: shuffle([correct].concat(generateDistractors(sum/n, sum/n-10, sum/n+10, 3))), correct: correct, type: 'choice' };
+}
+
+function g5q7_distributive() {
+  const a = rand(10,50), b = rand(10,50), c = rand(2,9);
+  const correct = ((a+b)*c).toString();
+  return { text: '(' + a + ' + ' + b + ') × ' + c + ' = ？', options: shuffle([correct].concat(generateDistractors((a+b)*c, a+b*c, a*c+b, 3))), correct: correct, type: 'choice' };
+}
+
+// G5 Ch8: 平行四邊形、三角形和梯形的面積
+function g5q8_parallelogramArea() {
+  const base = rand(3, 15), height = rand(3, 12);
+  const correct = (base * height).toString();
+  return { text: '平行四邊形底' + base + '公分、高' + height + '公分，面積是多少平方公分？', options: shuffle([correct].concat(generateDistractors(base*height, base, base*height*2, 3))), correct: correct, type: 'choice' };
+}
+
+function g5q8_triangleArea() {
+  const base = rand(4, 16), height = rand(4, 14);
+  const area = base * height / 2;
+  const correct = area.toString();
+  return { text: '三角形底' + base + '公分、高' + height + '公分，面積是多少平方公分？', options: shuffle([correct].concat(generateDistractors(area, 1, base*height, 3))), correct: correct, type: 'choice' };
+}
+
+function g5q8_trapezoidArea() {
+  const top = rand(3, 10), bottom = rand(top+2, top+10), height = rand(3, 10);
+  const area = (top + bottom) * height / 2;
+  const correct = area.toString();
+  return { text: '梯形上底' + top + '公分、下底' + bottom + '公分、高' + height + '公分，面積是多少？', options: shuffle([correct].concat(generateDistractors(area, 1, (top+bottom)*height, 3))), correct: correct, type: 'choice' };
+}
+
+// G5 Ch9: 時間的乘除
+function g5q9_timeMultiply() {
+  const min = rand(1, 15), sec = rand(0, 59);
+  const mul = rand(2, 5);
+  let totalSec = sec * mul;
+  let totalMin = min * mul + Math.floor(totalSec / 60);
+  totalSec = totalSec % 60;
+  const correct = totalMin + '分' + totalSec + '秒';
+  return { text: min + '分' + sec + '秒 × ' + mul + ' = ？', options: shuffle([
+    correct,
+    (totalMin+rand(-2,2)||1)+'分'+rand(0,59)+'秒',
+    (totalMin+rand(1,3))+'分'+rand(0,59)+'秒',
+    totalMin+'分'+rand(0,59)+'秒'
+  ].filter(function(v,i,a){return a.indexOf(v)===i}).slice(0,4)), correct: correct, type: 'choice' };
+}
+
+function g5q9_timeDivide() {
+  const totalMin = rand(10, 60), totalSec = rand(0, 59);
+  const div = [2, 3, 4, 5][rand(0, 3)];
+  let total = totalMin * 60 + totalSec;
+  let resultSec = Math.floor(total / div);
+  const resultMin = Math.floor(resultSec / 60);
+  resultSec = resultSec % 60;
+  const correct = resultMin + '分' + resultSec + '秒';
+  return { text: totalMin + '分' + totalSec + '秒 ÷ ' + div + ' = ？', options: shuffle([
+    correct,
+    (resultMin+rand(-2,2)||1)+'分'+rand(0,59)+'秒',
+    (resultMin+1)+'分'+rand(0,59)+'秒',
+    resultMin+'分'+rand(0,59)+'秒'
+  ].filter(function(v,i,a){return a.indexOf(v)===i}).slice(0,4)), correct: correct, type: 'choice' };
+}
+
+// G5 Ch10: 正方體和長方體
+function g5q10_cubeProperties() {
+  const qs = [
+    { text:'正方體有幾個面？', correct:'6', opts:shuffle(['6','4','8','12']) },
+    { text:'正方體有幾個頂點？', correct:'8', opts:shuffle(['8','6','12','4']) },
+    { text:'正方體有幾條邊？', correct:'12', opts:shuffle(['12','6','8','4']) },
+    { text:'長方體有幾個面？', correct:'6', opts:shuffle(['6','4','8','12']) },
+    { text:'長方體有幾個頂點？', correct:'8', opts:shuffle(['8','6','12','4']) },
+    { text:'長方體有幾條邊？', correct:'12', opts:shuffle(['12','6','8','4']) },
+  ];
+  const q = qs[rand(0, qs.length-1)];
+  return { text: q.text, options: q.opts, correct: q.correct, type: 'choice' };
+}
+
+function g5q10_surfaceArea() {
+  const side = rand(2, 10);
+  const correct = (side * side * 6).toString();
+  return { text: '正方體邊長' + side + '公分，表面積是多少平方公分？', options: shuffle([correct].concat(generateDistractors(side*side*6, side*side, side*side*12, 3))), correct: correct, type: 'choice' };
+}
+
+function g5q10_cuboidSurface() {
+  const l = rand(3, 10), w = rand(2, 8), h = rand(2, 8);
+  const area = (l*w + w*h + l*h) * 2;
+  const correct = area.toString();
+  return { text: '長方體長' + l + '、寬' + w + '、高' + h + '公分，表面積是多少？', options: shuffle([correct].concat(generateDistractors(area, l*w*h, area*2, 3))), correct: correct, type: 'choice' };
+}
+
+function g5q10_edgesRelation() {
+  const qs = [
+    { text:'正方體中，相鄰的邊是什麼關係？', correct:'垂直', opts:shuffle(['垂直','平行','相交','不相關']) },
+    { text:'長方體中，相對的邊是什麼關係？', correct:'平行', opts:shuffle(['平行','垂直','相交','不相關']) },
+  ];
+  const q = qs[rand(0, qs.length-1)];
+  return { text: q.text, options: q.opts, correct: q.correct, type: 'choice' };
+}
+
+const G5_GENERATORS = {
+  1: [g5q1_readGraph, g5q1_graphCompare, g5q1_dataInterpret, g5q1_readGraph, g5q1_dataInterpret],
+  2: [g5q2_factor, g5q2_multiple, g5q2_gcf, g5q2_lcm, g5q2_factor],
+  3: [g5q3_polygonIdentify, g5q3_triangleSides, g5q3_interiorAngle, g5q3_polygonIdentify, g5q3_triangleSides],
+  4: [g5q4_expandFraction, g5q4_reduceFraction, g5q4_compareFractions, g5q4_expandFraction, g5q4_reduceFraction],
+  5: [g5q5_symmetry, g5q5_symmetryPoint, g5q5_symmetry, g5q5_symmetry, g5q5_symmetry],
+  6: [g5q6_addFractions, g5q6_subFractions, g5q6_fractionWord, g5q6_addFractions, g5q6_subFractions],
+  7: [g5q7_multiStep, g5q7_average, g5q7_distributive, g5q7_multiStep, g5q7_average],
+  8: [g5q8_parallelogramArea, g5q8_triangleArea, g5q8_trapezoidArea, g5q8_parallelogramArea, g5q8_triangleArea],
+  9: [g5q9_timeMultiply, g5q9_timeDivide, g5q9_timeMultiply, g5q9_timeDivide, g5q9_timeMultiply],
+  10: [g5q10_cubeProperties, g5q10_surfaceArea, g5q10_cuboidSurface, g5q10_edgesRelation, g5q10_cubeProperties],
+  0: function() {
+    const all = [g5q2_factor,g5q3_polygonIdentify,g5q4_expandFraction,g5q5_symmetry,g5q6_addFractions,g5q7_multiStep,g5q8_parallelogramArea,g5q9_timeMultiply,g5q10_cubeProperties];
+    return all[rand(0, all.length-1)]();
+  }
+};
+'''
+
+# ===== MASTER GENERATORS =====
+MASTER_GENERATORS_JS = r'''
+const ALL_GENERATORS = {
+  G3: G3_GENERATORS,
+  G4: G4_GENERATORS,
+  G5: G5_GENERATORS,
+};
+
+function generateQuestion(chapterId) {
+  const gens = ALL_GENERATORS[gameState.currentGrade];
+  if (!gens) return fallbackQuestion(chapterId);
+  const g = gens[chapterId];
+  if (!g) return fallbackQuestion(chapterId);
+  let q;
+  if (typeof g === 'function') q = g();
+  else q = g[rand(0, g.length-1)]();
+  q.options = q.options.map(function(o) { return String(o); });
+  q.correct = String(q.correct);
+  return q;
+}
+
+function fallbackQuestion(chapterId) {
+  const a = rand(10, 99), b = rand(1, 9);
+  const correct = (a * b).toString();
+  return { text: a + ' × ' + b + ' = ？', options: shuffle([correct, (a*b+rand(-10,10)||a*b+1).toString(), (a*b+rand(-20,20)||a*b+2).toString(), (a*(b+rand(-2,2)||1)).toString()].filter(function(v,i,a){return a.indexOf(v)===i})), correct: correct, type: 'choice' };
+}
+
+function getHint(chapterId) {
+  const hints = {
+    G3: {
+      1:'小提醒：四位一讀，由右至左每四位一組喔！',
+      2:'小提醒：加減時記得對齊位數，從個位開始加減！',
+      3:'小提醒：1公分 = 10毫米，記得換算！',
+      4:'小提醒：乘法時要記得進位，從個位開始乘！',
+      5:'小提醒：小於90°是銳角，等於90°是直角，大於90°是鈍角！',
+      6:'小提醒：面積 = 長 × 寬，記得用平方公分當單位！',
+      7:'小提醒：除法依序「立商→乘→減→比較」計算！',
+      8:'小提醒：1公升 = 1000毫升！',
+      9:'小提醒：分子是取的份數，分母是總份數！',
+      0:'小提醒：仔細讀題，選出最合理的答案！',
+    },
+    G4: {
+      1:'小提醒：四位一讀，由右至左每四位一組喔！',
+      2:'小提醒：乘法時要記得進位，從個位開始乘！',
+      3:'小提醒：小於90°是銳角，等於90°是直角，大於90°是鈍角！',
+      4:'小提醒：除法依照「立商→乘→減→比較」的步驟計算！',
+      5:'小提醒：三個邊等長是正三角形，兩個邊等長是等腰三角形！',
+      6:'小提醒：分子小於分母是真分數，分子大於或等於分母是假分數！',
+      8:'小提醒：整數四則計算時，由左到右一步一步算！',
+      9:'小提醒：1 = 0.01，百分位是小數點後第二位！',
+      10:'小提醒：1公里 = 1000公尺，記得換算喔！',
+      0:'小提醒：仔細讀題，選出最合理的答案！',
+    },
+    G5: {
+      1:'小提醒：看折線圖時注意橫軸和縱軸代表的意義！',
+      2:'小提醒：因數是可以整除該數的數，倍數是該數的整數倍！',
+      3:'小提醒：三角形任兩邊和大於第三邊才能排成三角形！',
+      4:'小提醒：擴分 = 分子分母同乘；約分 = 分子分母同除！',
+      5:'小提醒：對稱軸兩側的圖形完全一樣，對稱點到對稱軸距離相等！',
+      6:'小提醒：異分母相加減時，先通分再計算！',
+      7:'小提醒：四則計算中，先乘除後加減，有括號先算括號！',
+      8:'小提醒：三角形面積 = 底×高÷2，平行四邊形 = 底×高！',
+      9:'小提醒：1分=60秒，1時=60分，1日=24時！',
+      10:'小提醒：正方體有6面、8頂點、12邊。表面積 = 邊長×邊長×6！',
+      0:'小提醒：仔細讀題，選出最合理的答案！',
+    }
+  };
+  return (hints[gameState.currentGrade] && hints[gameState.currentGrade][chapterId]) || '';
+}
+'''
+
+# ===== EXPLANATION GENERATOR =====
+EXPLANATION_JS = r'''
+function generateExplanation(chapterId, question, userAnswer) {
+  const correct = question.correct;
+  const qText = question.text;
+  function nums(t) { return (t.match(/\d[\d,.\s]*\d|\d+/g) || []).map(function(s) { return s.replace(/[,，]/g, ''); }); }
+
+  const grade = gameState.currentGrade;
+
+  // ---- G3 Explanations ----
+  if (grade === 'G3') {
+    if (chapterId === 1) {
+      if (qText.includes('讀作')) return '將數字分成千位、百位、十位、個位來讀，注意中間有零要讀出來。正確讀法是「' + correct + '」。';
+      if (qText.includes('記作')) return '將中文數字依序寫成千位、百位、十位、個位。正確寫法是 ' + correct + '。';
+      if (qText.includes('□')) { var ns=nums(qText); return '比較兩個數的大小，先比千位，再比百位，依此類推。' + ns[0] + ' ' + correct + ' ' + ns[1]; }
+      if (qText.includes('位數字')) return '看數字在定位板的哪個位置，那個位置的數字就是答案。答案為 ' + correct;
+      if (qText.includes('規律')) return '找出數列中每個數之間的差（規律），再用前一個數加上規律算出？。答案為 ' + correct;
+    }
+    if (chapterId === 2) {
+      if (qText.includes('＋') || qText.includes('+')) { var ns=nums(qText); return ns[0] + ' + ' + ns[1] + ' = ' + correct + '。將兩個數對齊位數後相加。'; }
+      if (qText.includes('−') || qText.includes('-')) { var ns=nums(qText); return ns[0] + ' − ' + ns[1] + ' = ' + correct + '。將兩個數對齊位數後相減。'; }
+      if (qText.includes('大約')) { var ns=nums(qText); return '用四捨五入法取概數到千位後再計算，約為 ' + correct + '。'; }
+      return '先理解題意，再用加減法計算。正確答案是 ' + correct + '。';
+    }
+    if (chapterId === 3) {
+      if (qText.includes('毫米') && qText.includes('公分')) return '1公分 = 10毫米。' + qText.replace('= ？','') + '= ' + correct + '。';
+      if (qText.includes('公分') && qText.includes('毫米') && qText.includes('+')) return '將公分和毫米分別相加，若毫米超過10要進位到公分。答案為 ' + correct + '。';
+      return '公分和毫米的換算：1公分 = 10毫米。答案為 ' + correct + '。';
+    }
+    if (chapterId === 4) {
+      if (qText.includes('×')) { var ns=nums(qText); return ns[0] + ' × ' + ns[1] + ' = ' + correct + '。從個位開始乘，記得進位。'; }
+      return '乘法應用題，將兩個數字相乘即可。正確答案是 ' + correct + '。';
+    }
+    if (chapterId === 5) {
+      if (qText.includes('是什麼角')) { var ns=nums(qText); return ns[0] + '° ' + (parseInt(ns[0])<90?'小於90°，是銳角':(parseInt(ns[0])===90?'等於90°，是直角':'大於90°，是鈍角')); }
+      if (qText.includes('幾度')) return '直角 = 90°，三角形內角和 = 180°。正確答案是 ' + correct + '°。';
+      return '銳角 < 直角(90°) < 鈍角 < 平角(180°)。答案為 ' + correct + '。';
+    }
+    if (chapterId === 6) {
+      if (qText.includes('周長')) { var ns=nums(qText); return '長方形周長 = (長+寬)×2 = (' + ns[0] + '+' + ns[1] + ')×2 = ' + correct + '公分。'; }
+      return '長方形面積 = 長 × 寬。正確答案是 ' + correct + ' 平方公分。';
+    }
+    if (chapterId === 7) {
+      var ns=nums(qText);
+      var a=parseInt(ns[0]), b=parseInt(ns[1]);
+      var qq=Math.floor(a/b), r=a%b;
+      return a + ' ÷ ' + b + ' = ' + (r===0?qq:qq+'...'+r) + '。用「立商→乘→減→比較」的步驟計算。';
+    }
+    if (chapterId === 8) {
+      if (qText.includes('公升') && !qText.includes('毫升')) return '1公升 = 1000毫升。' + nums(qText)[0] + ' × 1000 = ' + correct + ' 毫升。';
+      return '容量換算：1公升 = 1000毫升。答案為 ' + correct + '。';
+    }
+    if (chapterId === 9) {
+      if (qText.includes('分之')) return '分數的分子代表取的份數，分母代表總份數。正確記法是 ' + correct + '。';
+      if (qText.includes('□')) return '比較同分母分數：分子大的分數就大。答案為 ' + correct + '。';
+      return '分數應用題。正確答案是 ' + correct + '。';
+    }
+  }
+
+  // ---- G4 Explanations (simplified fallbacks) ----
+  if (grade === 'G4') {
+    if (chapterId === 1) {
+      if (qText.includes('讀作')) return '每四位一組（個、萬、億）讀出。正確讀法是「' + correct + '」。';
+      if (qText.includes('記作')) return '中文數字轉阿拉伯數字，逐位寫下。正確寫法是 ' + correct + '。';
+      if (qText.includes('□')) { var ns=nums(qText); return '從最高位開始比較。' + ns[0] + ' ' + correct + ' ' + ns[1]; }
+      if (qText.includes('位數字')) return '看對應位數的數字。答案為 ' + correct + '。';
+      if (qText.includes('規律')) return '這是等差數列，找出規律後計算。答案為 ' + correct + '。';
+    }
+    if (chapterId === 2) { var ns=nums(qText); return '乘法計算：' + ns[0] + ' × ' + ns[1] + ' = ' + correct + '。從個位開始乘，注意進位。'; }
+    if (chapterId === 3) {
+      if (qText.includes('是什麼角')) { var ns=nums(qText); var d=parseInt(ns[0]); return d + '° ' + (d<90?'小於90°，是銳角':(d===90?'等於90°，是直角':'大於90°，是鈍角')); }
+      if (qText.includes('合起來')) { var ns=nums(qText); return ns[0] + '° + ' + ns[1] + '° = ' + correct + '°。'; }
+      if (qText.includes('時鐘')) return '時鐘上1大格 = 30°。答案為 ' + correct + '°。';
+      return '角度計算，答案為 ' + correct + '。';
+    }
+    if (chapterId === 4) { var ns=nums(qText); return '除法計算：' + ns[0] + ' ÷ ' + ns[1] + ' = ' + correct + '。用立商→乘→減→比較計算。'; }
+    if (chapterId === 5) return '三角形的分類：依邊或依角來分。正確答案是 ' + correct + '。';
+    if (chapterId === 6) {
+      if (qText.includes('什麼分數')) return '真分數(分子<分母)、假分數(分子≥分母)、帶分數(整數+真分數)。答案為 ' + correct + '。';
+      if (qText.includes('□')) return '同分母分數比較：分子大的較大。答案為 ' + correct + '。';
+      return '帶分數轉假分數：整數×分母+分子。答案為 ' + correct + '。';
+    }
+    if (chapterId === 8) return '整數四則：由左到右一步一步計算。答案為 ' + correct + '。';
+    if (chapterId === 9) {
+      if (qText.includes('0.01')) return '整數部分寫在小數點左邊，十分位在小數點右第一位。答案為 ' + correct + '。';
+      if (qText.includes('□')) { var ns=nums(qText); return '比較小數：先比整數部分，再比十分位。' + ns[0] + ' ' + correct + ' ' + ns[1]; }
+      if (qText.includes('公尺')) return '1公尺 = 100公分，公分÷100 = 公尺。答案為 ' + correct + '。';
+      return '小數計算，答案為 ' + correct + '。';
+    }
+    if (chapterId === 10) {
+      if (qText.includes('公里') && qText.includes('？')) return '1公里 = 1000公尺。答案為 ' + correct + ' 公尺。';
+      if (qText.includes('公尺 = ？公里')) return '公尺換算公里：÷1000。答案為 ' + correct + ' 公里。';
+      return '長度換算，答案為 ' + correct + '。';
+    }
+  }
+
+  // ---- G5 Explanations ----
+  if (grade === 'G5') {
+    if (chapterId === 1) return '折線圖用來顯示數量隨時間（或類別）的變化趨勢。正確答案是 ' + correct + '。';
+    if (chapterId === 2) {
+      if (qText.includes('因數')) return '因數是可以整除該數的數。' + correct + ' 能整除題目中的數，所以是它的因數。';
+      if (qText.includes('倍數')) return '倍數是該數乘以整數的結果。' + correct + ' 是題目中數的倍數。';
+      if (qText.includes('最大公因數')) return '找出兩個數的所有公因數中最大的那個。答案為 ' + correct + '。';
+      if (qText.includes('最小公倍數')) return '找出兩個數的所有公倍數中最小的那個。答案為 ' + correct + '。';
+      return '因數和倍數計算。正確答案是 ' + correct + '。';
+    }
+    if (chapterId === 3) {
+      if (qText.includes('內角和')) return 'n邊形內角和 = (n-2) × 180°。答案為 ' + correct + '°。';
+      if (qText.includes('能不能')) return '三角形任兩邊的和大於第三邊才能排成三角形。答案為 ' + correct + '。';
+      return '多邊形的基本概念。正確答案是 ' + correct + '。';
+    }
+    if (chapterId === 4) {
+      if (qText.includes('擴分')) return '擴分就是分子分母同乘一個數，分數的值不變。答案為 ' + correct + '。';
+      if (qText.includes('約分')) return '約分就是分子分母同除一個公因數，直到最簡分數。答案為 ' + correct + '。';
+      if (qText.includes('□')) return '通分後比較分子大小。答案為 ' + correct + '。';
+      return '分數運算，答案為 ' + correct + '。';
+    }
+    if (chapterId === 5) {
+      if (qText.includes('對稱軸')) return '正n邊形有n條對稱軸。正確答案是 ' + correct + '。';
+      return '線對稱圖形中，對稱點到對稱軸的距離相等。答案為 ' + correct + '。';
+    }
+    if (chapterId === 6) {
+      if (qText.includes('＋') || qText.includes('+')) return '異分母分數相加：先通分找出公分母，再將分子相加。答案為 ' + correct + '。';
+      if (qText.includes('−') || qText.includes('-')) return '異分母分數相減：先通分找出公分母，再將分子相減。答案為 ' + correct + '。';
+      return '分數加減應用題。答案為 ' + correct + '。';
+    }
+    if (chapterId === 7) {
+      if (qText.includes('平均')) return '平均 = 總和 ÷ 個數。答案為 ' + correct + '。';
+      if (qText.includes('(')) return '有括號先算括號裡的。答案為 ' + correct + '。';
+      return '整數四則：先乘除後加減。答案為 ' + correct + '。';
+    }
+    if (chapterId === 8) {
+      if (qText.includes('平行四邊形')) return '平行四邊形面積 = 底 × 高 = ' + correct + ' 平方公分。';
+      if (qText.includes('三角形')) return '三角形面積 = 底 × 高 ÷ 2 = ' + correct + ' 平方公分。';
+      if (qText.includes('梯形')) return '梯形面積 = (上底+下底) × 高 ÷ 2 = ' + correct + ' 平方公分。';
+      return '面積計算，答案為 ' + correct + '。';
+    }
+    if (chapterId === 9) return '時間計算：1分=60秒，1時=60分。答案為 ' + correct + '。';
+    if (chapterId === 10) {
+      if (qText.includes('表面積')) return '正方體表面積 = 邊長×邊長×6 = ' + correct + ' 平方公分。';
+      if (qText.includes('垂直')) return '正方體和長方體中，相鄰的邊互相垂直。答案為 ' + correct + '。';
+      if (qText.includes('平行')) return '正方體和長方體中，相對的邊互相平行。答案為 ' + correct + '。';
+      return '正方體有6面、8頂點、12邊。答案為 ' + correct + '。';
+    }
+  }
+
+  if (chapterId === 0) return '正確答案是「' + correct + '」。這是綜合練習題，涵蓋多個單元的知識。';
+  return '正確答案是「' + correct + '」。你選了「' + userAnswer + '」。建議回顧這個單元的基本觀念。';
+}
+'''
+
+# ===== AUDIO =====
+AUDIO_JS = r'''
+let audioCtx = null;
+function getAudioCtx() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  return audioCtx;
+}
+
+function playBeep(freq, duration, type) {
+  type = type || 'sine';
+  try {
+    const ctx = getAudioCtx();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = type;
+    osc.frequency.value = freq;
+    gain.gain.value = 0.15;
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + duration);
+  } catch(e) {}
+}
+
+function playCorrect() { playBeep(523, 0.1); setTimeout(function(){playBeep(659,0.1)},100); setTimeout(function(){playBeep(784,0.15)},200); }
+function playWrong() { playBeep(200, 0.15, 'square'); setTimeout(function(){playBeep(150,0.2,'square')},150); }
+function playStar() { playBeep(880,0.1); setTimeout(function(){playBeep(1100,0.15)},80); setTimeout(function(){playBeep(1320,0.2)},160); }
+function playClick() { playBeep(600, 0.05); }
+'''
+
+# ===== CONFETTI =====
+CONFETTI_JS = r'''
+function spawnConfetti() {
+  const container = document.createElement('div');
+  container.className = 'confetti-container';
+  document.body.appendChild(container);
+  const colors = ['#f59e0b','#ef4444','#10b981','#3b82f6','#8b5cf6','#ec4899','#fbbf24'];
+  for (let i = 0; i < 50; i++) {
+    const piece = document.createElement('div');
+    piece.className = 'confetti-piece';
+    piece.style.left = Math.random() * 100 + '%';
+    piece.style.top = -20 - Math.random() * 30 + 'px';
+    piece.style.background = colors[rand(0, colors.length-1)];
+    piece.style.animationDelay = Math.random() * 2 + 's';
+    piece.style.animationDuration = (2 + Math.random() * 3) + 's';
+    piece.style.width = (6 + Math.random() * 10) + 'px';
+    piece.style.height = (6 + Math.random() * 10) + 'px';
+    container.appendChild(piece);
+  }
+  setTimeout(function(){ container.remove(); }, 5000);
+}
+'''
+
+# ===== GAME CONTROLLER =====
+GAME_CONTROLLER_JS = r'''
+let gameState = {
+  currentGrade: null,
+  currentChapter: null,
+  currentLevel: null,
+  currentLevelId: null,
+  questions: [],
+  currentQIndex: 0,
+  score: 0,
+  correctCount: 0,
+  hearts: 5,
+  timer: null,
+  timeLeft: 0,
+  totalTime: 0,
+  answered: false,
+  wrongAnswers: [],
+  streak: 0,
+};
+
+const CHARACTER_MESSAGES = {
+  correct: ['太棒了！🌟', '你好厲害！', '答對了！繼續加油！', '完美！', '你真聰明！🧠'],
+  wrong: ['沒關係，再試試！', '下一題加油喔！💪', '別灰心！', '差一點點！'],
+  start: ['準備好了嗎？開始囉！', '讓我們一起挑戰吧！', '加油加油！'],
+  complete: ['你好棒！完成了！', '太厲害了，全部答完！', '你是數學小高手！🏆'],
+  greatScore: ['三顆星！滿分王！⭐⭐⭐', '太強了吧！幾乎全對！'],
+  goodScore: ['兩顆星！做得不錯！⭐⭐', '繼續保持！'],
+  okScore: ['一顆星！再練習一下會更好！⭐'],
+};
+
+function render() {
+  const app = document.getElementById('app');
+  // Check login first
+  if (!getCurrentUser()) {
+    renderAuth(app);
+    return;
+  }
+  if (gameState.currentGrade === null) {
+    renderGradeSelect(app);
+  } else if (!gameState.currentChapter) {
+    renderWorldMap(app);
+  } else if (gameState.currentLevel && gameState.questions.length > 0) {
+    renderGamePlay(app);
+  } else {
+    renderLevelSelect(app);
+  }
+}
+
+// ===== GRADE SELECT =====
+function renderGradeSelect(app) {
+  gameState.currentGrade = null;
+  gameState.currentChapter = null;
+  gameState.currentLevel = null;
+
+  var currentUser = getCurrentUser();
+
+  var html = '';
+  html += '<div class="screen active" id="grade-screen">';
+  html += '<div class="grade-mascot">🏫</div>';
+  html += '<div class="grade-title"><h1>數學大冒險</h1><p>嗨，' + currentUser + '！選擇你的年級，開始學習冒險！</p></div>';
+  html += '<div class="grade-list">';
+
+  for (var i = 0; i < GRADES.length; i++) {
+    var g = GRADES[i];
+    // Load per-user per-grade state to show stars
+    var tempState = null;
+    try {
+      tempState = JSON.parse(localStorage.getItem(userStorageKey(g.id)) || '{}');
+    } catch(e) { tempState = {}; }
+    var totalStars = 0;
+    if (tempState.progress) {
+      for (var chId in tempState.progress) {
+        for (var lvId in tempState.progress[chId]) {
+          totalStars += tempState.progress[chId][lvId].stars || 0;
+        }
+      }
+    }
+
+    html += '<div class="grade-card" onclick="selectGrade(\'' + g.id + '\')">';
+    html += '<div class="grade-icon">' + g.icon + '</div>';
+    html += '<div class="grade-info">';
+    html += '<div class="grade-name">' + g.name + '</div>';
+    html += '<div class="grade-pub">' + g.publisher + ' 版本</div>';
+    html += '</div>';
+    html += '<div class="grade-stars">⭐ ' + totalStars + '</div>';
+    html += '</div>';
+  }
+
+  html += '</div>';
+  html += '<div style="display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-top:8px;">';
+  html += '<button class="btn btn-primary btn-small" onclick="showLeaderboard()">🏆 排行榜</button>';
+  html += '<button class="btn btn-secondary btn-small" onclick="logoutAndRender()">🚪 登出</button>';
+  html += '<button class="btn btn-secondary btn-small" onclick="resetAllProgress()">🔄 清除進度</button>';
+  html += '</div>';
+  html += '</div>';
+
+  app.innerHTML = html;
+}
+
+function showLeaderboard() {
+  playClick();
+  var app = document.getElementById('app');
+  renderLeaderboard(app, 'ALL');
+}
+
+function logoutAndRender() {
+  if (!confirm('確定要登出嗎？你的學習進度會保留在帳號裡。')) return;
+  logoutUser();
+  gameState.currentGrade = null;
+  gameState.currentChapter = null;
+  gameState.currentLevel = null;
+  gameState.questions = [];
+  clearInterval(gameState.timer);
+  // 讓 render() 自己根據登入狀態決定要顯示什麼畫面
+  render();
+}
+
+function selectGrade(gradeId) {
+  playClick();
+  gameState.currentGrade = gradeId;
+  state = loadState();
+  goToMap();
+}
+
+function resetAllProgress() {
+  var user = getCurrentUser();
+  if (confirm('確定要清除「' + user + '」的所有年級學習進度嗎？這個動作無法復原！')) {
+    for (var i = 0; i < GRADES.length; i++) {
+      localStorage.removeItem(userStorageKey(GRADES[i].id));
+    }
+    localStorage.removeItem('math_adventure_daily');
+    render();
+  }
+}
+
+// ===== WORLD MAP =====
+function renderWorldMap(app) {
+  gameState.currentChapter = null;
+  gameState.currentLevel = null;
+  const chapters = getCurrentChapters();
+  const gradeInfo = GRADES.find(function(g) { return g.id === gameState.currentGrade; });
+
+  var totalEarned = 0, totalMax = 0;
+  for (var i = 0; i < chapters.length; i++) {
+    totalMax += getMaxChapterStars(chapters[i].id);
+    totalEarned += getChapterStars(chapters[i].id);
+  }
+
+  var html = '';
+  html += '<div class="screen active" id="world-map">';
+  html += '<div style="text-align:center;margin-top:12px;">';
+  html += '<div style="font-size:48px;animation:float 2s ease-in-out infinite;">🧑‍🏫</div>';
+  html += '</div>';
+  html += '<h1 class="world-map-title">數學大冒險</h1>';
+  html += '<p class="world-map-subtitle">' + (gradeInfo ? gradeInfo.name + ' · ' + gradeInfo.publisher + '版' : '') + ' — 選擇世界開始挑戰！</p>';
+  html += '<div class="progress-indicator" style="margin-bottom:12px;">⭐ ' + totalEarned + ' / ' + totalMax + ' 顆星</div>';
+  html += '<div class="world-grid">';
+
+  for (var i = 0; i < chapters.length; i++) {
+    var ch = chapters[i];
+    var unlocked = isChapterUnlocked(ch.id);
+    var stars = getChapterStars(ch.id);
+    var maxStars = getMaxChapterStars(ch.id);
+
+    var starHtml = '';
+    for (var s = 0; s < maxStars; s++) {
+      starHtml += '<span class="' + (s < stars ? 'earned' : '') + '">⭐</span>';
+    }
+
+    html += '<div class="world-card ' + (unlocked ? '' : 'locked') + '"';
+    html += ' onclick="' + (unlocked ? 'selectChapter(' + ch.id + ')' : '') + '">';
+    if (!unlocked) html += '<span class="lock-icon">🔒</span>';
+    html += '<div class="world-icon">' + ch.icon + '</div>';
+    html += '<div class="world-name">' + ch.name + '</div>';
+    html += '<div class="world-topic">' + ch.topic + '</div>';
+    if (stars > 0) html += '<div class="world-stars">' + starHtml + '</div>';
+    html += '</div>';
+  }
+
+  html += '</div>';
+  html += '<div style="display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-top:8px;">';
+  html += '<button class="btn btn-secondary btn-small" onclick="showStats()">📊 學習紀錄</button>';
+  html += '<button class="btn btn-primary btn-small" onclick="showLeaderboard()">🏆 排行榜</button>';
+  html += '<button class="btn btn-secondary btn-small" onclick="goToGradeSelect()">🏫 更換年級</button>';
+  html += '<button class="btn btn-secondary btn-small" onclick="resetProgress()">🔄 重新開始</button>';
+  html += '</div>';
+  html += '</div>';
+
+  app.innerHTML = html;
+}
+
+// ===== LEVEL SELECT =====
+function selectChapter(chapterId) {
+  playClick();
+  clearInterval(gameState.timer);
+  gameState.currentChapter = chapterId;
+  gameState.currentLevel = null;
+  gameState.currentLevelId = null;
+  gameState.questions = [];
+  gameState.currentQIndex = 0;
+  gameState.score = 0;
+  gameState.correctCount = 0;
+  gameState.hearts = 5;
+  gameState.streak = 0;
+  gameState.wrongAnswers = [];
+  gameState.totalTime = 0;
+  gameState.timeLeft = 0;
+  gameState.answered = false;
+  render();
+}
+
+function renderLevelSelect(app) {
+  const chapters = getCurrentChapters();
+  var ch = null;
+  for (var i = 0; i < chapters.length; i++) {
+    if (chapters[i].id === gameState.currentChapter) { ch = chapters[i]; break; }
+  }
+  if (!ch) { goToMap(); return; }
+  const levels = getLevels(gameState.currentChapter);
+  const stars = getChapterStars(gameState.currentChapter);
+  const maxStars = getMaxChapterStars(gameState.currentChapter);
+
+  var html = '';
+  html += '<div class="screen active" id="level-select">';
+  html += '<div class="top-bar">';
+  html += '<button class="back-btn" onclick="goToMap()">←</button>';
+  html += '<div class="progress-indicator">⭐ ' + stars + '/' + maxStars + '</div>';
+  html += '</div>';
+  html += '<div style="text-align:center;">';
+  html += '<div style="font-size:48px;">' + ch.icon + '</div>';
+  html += '<h2 style="font-size:22px;font-weight:900;">' + ch.name + '</h2>';
+  html += '<p style="color:var(--text-light);font-size:14px;margin-bottom:12px;">' + ch.topic + '</p>';
+  html += '</div>';
+  html += '<div class="level-list">';
+
+  for (var i = 0; i < levels.length; i++) {
+    var lv = levels[i];
+    var unlocked = isLevelUnlocked(gameState.currentChapter, lv.id);
+    var progress = getLevelProgress(gameState.currentChapter, lv.id);
+    var starHtml = '';
+    if (progress) {
+      for (var s = 0; s < 3; s++) {
+        starHtml += '<span class="' + (s < progress.stars ? 'earned' : '') + '">⭐</span>';
+      }
+    }
+
+    html += '<div class="level-card ' + (unlocked ? '' : 'locked') + '"';
+    html += ' onclick="' + (unlocked ? 'startLevel(' + lv.id + ')' : '') + '">';
+    html += '<div class="level-info">';
+    html += '<div class="level-name">' + lv.name + (progress && progress.completed ? ' ✅' : '') + '</div>';
+    html += '<div class="level-desc">' + lv.desc + '（' + lv.qCount + ' 題・' + lv.time + '秒/題）</div>';
+    html += '</div>';
+    html += '<div style="display:flex;flex-direction:column;align-items:center;gap:4px;">';
+    html += '<span class="level-difficulty diff-' + lv.diff + '">' + ({easy:'簡單',medium:'中等',hard:'困難'})[lv.diff] + '</span>';
+    html += starHtml ? '<div style="display:flex;gap:2px;">' + starHtml + '</div>' : (unlocked ? '🚀' : '🔒');
+    html += '</div>';
+    html += '</div>';
+  }
+
+  html += '</div>';
+  html += '<button class="btn btn-secondary btn-small" onclick="goToMap()" style="margin-top:8px;">回到世界地圖</button>';
+  html += '</div>';
+
+  app.innerHTML = html;
+}
+
+// ===== GAME PLAY =====
+function startLevel(levelId) {
+  playClick();
+  const chapterId = gameState.currentChapter;
+  const level = getLevels(chapterId).find(function(l) { return l.id === levelId; });
+  if (!level) return;
+
+  gameState.currentLevel = level;
+  gameState.currentLevelId = levelId;
+  gameState.questions = [];
+  gameState.currentQIndex = 0;
+  gameState.score = 0;
+  gameState.correctCount = 0;
+  gameState.hearts = 5;
+  gameState.streak = 0;
+  gameState.wrongAnswers = [];
+  gameState.totalTime = level.time * level.qCount;
+  gameState.timeLeft = level.time;
+  gameState.answered = false;
+
+  for (var i = 0; i < level.qCount; i++) {
+    try {
+      var q = generateQuestion(chapterId);
+      if (q && q.options && q.options.length >= 2) {
+        gameState.questions.push(q);
+      } else {
+        gameState.questions.push(fallbackQuestion(chapterId));
+      }
+    } catch(e) {
+      gameState.questions.push(fallbackQuestion(chapterId));
+    }
+  }
+
+  showCharacter(CHARACTER_MESSAGES.start[rand(0, CHARACTER_MESSAGES.start.length-1)]);
+  setTimeout(function() {
+    render();
+    startTimer();
+  }, 1500);
+}
+
+function startTimer() {
+  clearInterval(gameState.timer);
+  gameState.timer = setInterval(function() {
+    gameState.timeLeft--;
+    updateTimerBar();
+    if (gameState.timeLeft <= 0) {
+      clearInterval(gameState.timer);
+      handleTimeout();
+    }
+  }, 1000);
+}
+
+function updateTimerBar() {
+  const bar = document.querySelector('.timer-bar');
+  if (gameState.currentLevel) {
+    var pct = (gameState.timeLeft / gameState.currentLevel.time) * 100;
+    if (bar) {
+      bar.style.width = pct + '%';
+      if (pct <= 20) bar.classList.add('urgent');
+      else bar.classList.remove('urgent');
+    }
+  }
+}
+
+function handleTimeout() {
+  if (gameState.answered) return;
+  gameState.answered = true;
+  gameState.streak = 0;
+  gameState.hearts--;
+  gameState.wrongAnswers.push({ question: gameState.questions[gameState.currentQIndex], userAnswer: '（超時未答）' });
+  playWrong();
+  showCorrectAnswer();
+  setTimeout(function() { nextQuestion(); }, 1200);
+}
+
+function showCorrectAnswer() {
+  var q = gameState.questions[gameState.currentQIndex];
+  var buttons = document.querySelectorAll('.option-btn');
+  buttons.forEach(function(btn) {
+    if (btn.dataset.answer === q.correct) btn.classList.add('correct');
+  });
+}
+
+function answerQuestion(selectedAnswer) {
+  if (gameState.answered) return;
+  gameState.answered = true;
+  clearInterval(gameState.timer);
+
+  var q = gameState.questions[gameState.currentQIndex];
+  var isCorrect = selectedAnswer === q.correct;
+
+  var buttons = document.querySelectorAll('.option-btn');
+  buttons.forEach(function(btn) {
+    btn.style.pointerEvents = 'none';
+    if (btn.dataset.answer === q.correct) btn.classList.add('correct');
+    if (btn.dataset.answer === selectedAnswer && !isCorrect) btn.classList.add('wrong');
+  });
+
+  if (isCorrect) {
+    gameState.correctCount++;
+    gameState.streak = (gameState.streak || 0) + 1;
+    playCorrect();
+    showFeedback('✓', 'correct-fb');
+    if (gameState.streak >= 5) showCharacter('連續答對 ' + gameState.streak + ' 題！🔥 太強了！');
+    else if (gameState.streak >= 3) showCharacter('連對 ' + gameState.streak + ' 題！繼續保持！');
+    else showCharacter(CHARACTER_MESSAGES.correct[rand(0, CHARACTER_MESSAGES.correct.length-1)]);
+  } else {
+    gameState.streak = 0;
+    gameState.hearts--;
+    gameState.wrongAnswers.push({ question: q, userAnswer: selectedAnswer });
+    playWrong();
+    showFeedback('✗', 'wrong-fb');
+    showCharacter(CHARACTER_MESSAGES.wrong[rand(0, CHARACTER_MESSAGES.wrong.length-1)]);
+  }
+
+  setTimeout(function() { removeFeedback(); nextQuestion(); }, 1200);
+}
+
+function showFeedback(symbol, cls) {
+  var overlay = document.createElement('div');
+  overlay.className = 'feedback-overlay';
+  overlay.innerHTML = '<div class="feedback-text ' + cls + '">' + symbol + '</div>';
+  document.body.appendChild(overlay);
+}
+
+function removeFeedback() {
+  var overlay = document.querySelector('.feedback-overlay');
+  if (overlay) overlay.remove();
+}
+
+function nextQuestion() {
+  removeFeedback();
+  gameState.currentQIndex++;
+  if (gameState.currentQIndex >= gameState.questions.length || gameState.hearts <= 0) {
+    finishLevel();
+    return;
+  }
+  gameState.answered = false;
+  gameState.timeLeft = gameState.currentLevel.time;
+  render();
+  startTimer();
+}
+
+function finishLevel() {
+  clearInterval(gameState.timer);
+  var chapterId = gameState.currentChapter;
+  var playedLevelId = gameState.currentLevelId;
+  var level = gameState.currentLevel;
+  gameState.currentLevel = null;
+  gameState.currentLevelId = null;
+
+  var totalQuestions = gameState.questions.length;
+  var accuracy = gameState.correctCount / totalQuestions;
+  gameState.score = Math.round(accuracy * 100);
+  var stars;
+  if (accuracy >= 0.9) stars = 3;
+  else if (accuracy >= 0.7) stars = 2;
+  else stars = 1;
+
+  if (!state.progress[chapterId]) state.progress[chapterId] = {};
+  var prev = state.progress[chapterId][playedLevelId];
+  if (!prev || stars > prev.stars || gameState.score > (prev.bestScore || 0)) {
+    state.progress[chapterId][playedLevelId] = {
+      stars: prev ? Math.max(stars, prev.stars) : stars,
+      bestScore: prev ? Math.max(gameState.score, prev.bestScore || 0) : gameState.score,
+      completed: true,
+    };
+    state.totalStars = 0;
+    for (var chId in state.progress) {
+      for (var lvId in state.progress[chId]) {
+        state.totalStars += state.progress[chId][lvId].stars || 0;
+      }
+    }
+    saveState();
+  }
+
+  if (stars === 3) { playStar(); spawnConfetti(); }
+  updateDailyStreak();
+  showCharacter(CHARACTER_MESSAGES.complete[rand(0, CHARACTER_MESSAGES.complete.length-1)]);
+  renderResult(stars, accuracy, totalQuestions, chapterId, playedLevelId);
+}
+
+function renderResult(stars, accuracy, totalQuestions, chapterId, levelId) {
+  var app = document.getElementById('app');
+  const chapters = getCurrentChapters();
+  var ch = null;
+  for (var i = 0; i < chapters.length; i++) {
+    if (chapters[i].id === chapterId) { ch = chapters[i]; break; }
+  }
+  var level = getLevels(chapterId).find(function(l) { return l.id === levelId; });
+
+  var starHtml = '';
+  for (var i = 0; i < 3; i++) {
+    starHtml += '<span class="star ' + (i < stars ? 'earned' : '') + '" style="animation-delay:' + (i*0.2) + 's">⭐</span>';
+  }
+
+  var msg;
+  if (stars === 3) msg = CHARACTER_MESSAGES.greatScore[rand(0, CHARACTER_MESSAGES.greatScore.length-1)];
+  else if (stars === 2) msg = CHARACTER_MESSAGES.goodScore[rand(0, CHARACTER_MESSAGES.goodScore.length-1)];
+  else msg = CHARACTER_MESSAGES.okScore[rand(0, CHARACTER_MESSAGES.okScore.length-1)];
+
+  var nextLevelId = levelId + 1;
+  var nextLevel = getLevels(chapterId).find(function(l) { return l.id === nextLevelId; });
+  var wrongAnswers = gameState.wrongAnswers || [];
+  var hasWrong = wrongAnswers.length > 0;
+
+  var reviewHtml = '';
+  if (hasWrong) {
+    reviewHtml = '<div class=\"review-section\"><div class=\"review-header\" onclick=\"toggleReview()\"><span>📝 錯題複習（' + wrongAnswers.length + ' 題）</span><span class=\"review-toggle\" id=\"review-toggle-icon\">▶</span></div><div class=\"review-body\" id=\"review-body\" style=\"display:none;\">';
+    wrongAnswers.forEach(function(wa, idx) {
+      var explanation = generateExplanation(chapterId, wa.question, wa.userAnswer);
+      reviewHtml += '<div class=\"review-item\"><div class=\"review-qnum\">錯題 ' + (idx + 1) + '</div><div class=\"review-question\">' + wa.question.text + '</div><div class=\"review-answers\"><div class=\"review-row wrong-row\"><span class=\"review-label\">❌ 你的答案：</span><span class=\"wrong-val\">' + wa.userAnswer + '</span></div><div class=\"review-row correct-row\"><span class=\"review-label\">✅ 正確答案：</span><span class=\"correct-val\">' + wa.question.correct + '</span></div></div><div class=\"review-explanation\"><div class=\"review-exp-title\">💡 解析</div><div class=\"review-exp-text\">' + explanation + '</div></div></div>';
+    });
+    reviewHtml += '</div></div>';
+  }
+
+  var html = '<div class=\"screen active\" id=\"result-screen\" style=\"justify-content:flex-start;overflow-y:auto;padding:16px 0 40px;\"><div class=\"result-card\"><div style=\"font-size:48px;\">' + ch.icon + '</div><h2 style=\"font-size:22px;font-weight:900;\">' + ch.name + ' - ' + (level ? level.name : '挑戰結束') + '</h2><div class=\"result-stars\">' + starHtml + '</div><div class=\"result-score\">得分：<span>' + gameState.score + '</span> 分</div><div style=\"font-size:14px;color:var(--text-light);\">答對 ' + gameState.correctCount + ' / ' + totalQuestions + ' 題 （正確率 ' + Math.round(accuracy * 100) + '%）' + (hasWrong ? '<br><span style=\"color:var(--danger);\">答錯 ' + wrongAnswers.length + ' 題，下方可以複習喔！</span>' : '<br><span style=\"color:var(--success);\">🎉 全部答對，太厲害了！</span>') + '</div><div class=\"result-msg\">' + msg + '</div><div class=\"result-buttons\"><button class=\"btn btn-secondary btn-small\" onclick=\"goToMap()\">🗺️ 世界地圖</button><button class=\"btn btn-primary btn-small\" onclick=\"retryLevel(' + chapterId + ',' + levelId + ')\">🔄 再試一次</button>' + (nextLevel ? '<button class=\"btn btn-primary btn-small\" onclick=\"startLevelFromResult(' + chapterId + ',' + nextLevelId + ')\">▶️ 下一關</button>' : '') + '</div></div>' + reviewHtml + '</div>';
+  app.innerHTML = html;
+}
+
+function toggleReview() {
+  var body = document.getElementById('review-body');
+  var icon = document.getElementById('review-toggle-icon');
+  if (body.style.display === 'none') { body.style.display = 'block'; icon.textContent = '▼'; }
+  else { body.style.display = 'none'; icon.textContent = '▶'; }
+}
+
+function retryLevel(chapterId, levelId) { gameState.currentChapter = chapterId; startLevel(levelId); }
+function startLevelFromResult(chapterId, levelId) { gameState.currentChapter = chapterId; startLevel(levelId); }
+
+function renderGamePlay(app) {
+  var ch = null;
+  var chapters = getCurrentChapters();
+  for (var i = 0; i < chapters.length; i++) { if (chapters[i].id === gameState.currentChapter) { ch = chapters[i]; break; } }
+  var level = gameState.currentLevel;
+  if (!ch || !level) { goToMap(); return; }
+  var q = gameState.questions[gameState.currentQIndex];
+  if (!q) { finishLevel(); return; }
+  var qNum = gameState.currentQIndex + 1;
+  var totalQ = gameState.questions.length;
+
+  var heartHtml = '';
+  for (var i = 0; i < 5; i++) { heartHtml += i < gameState.hearts ? '❤️' : '🖤'; }
+
+  var html = '<div class=\"screen active\" id=\"game-play\"><div class=\"top-bar\"><button class=\"back-btn\" onclick=\"quitLevel()\">✕</button><div class=\"progress-indicator\">' + qNum + '/' + totalQ + '</div></div><div class=\"game-header\"><div class=\"question-counter\">第 ' + qNum + ' 題</div><div style=\"font-size:14px;font-weight:700;color:var(--primary);\">🏆 ' + gameState.score + '分</div><div class=\"hearts\">' + heartHtml + '</div><div style=\"display:flex;align-items:center;gap:8px;\">' + (gameState.streak >= 3 ? '<span style=\"font-size:14px;color:#f59e0b;\">🔥' + gameState.streak + '連擊</span>' : '') + '<span style=\"font-weight:700;font-size:14px;color:' + (gameState.timeLeft<=5?'var(--danger)':'var(--text-light)') + ';\">⏱️' + gameState.timeLeft + 's</span></div></div><div class=\"timer-bar-wrapper\"><div class=\"timer-bar\" style=\"width:' + (gameState.timeLeft/level.time)*100 + '%\"></div></div><div class=\"question-card\"><div class=\"question-text\">' + q.text + '</div><div class=\"options-grid\">';
+
+  for (var idx = 0; idx < q.options.length; idx++) {
+    var optStr = String(q.options[idx]);
+    html += '<button class=\"option-btn\" data-answer=\"' + optStr.replace(/\"/g, '&quot;') + '\" onclick=\"answerQuestion(this.dataset.answer)\"><span style=\"font-size:11px;color:var(--text-light);margin-right:6px;\">' + (idx+1) + '</span>' + optStr + '</button>';
+  }
+
+  html += '</div></div></div>';
+  app.innerHTML = html;
+  updateTimerBar();
+
+  var handler = function(e) {
+    var num = parseInt(e.key);
+    if (num >= 1 && num <= 4) {
+      var btns = document.querySelectorAll('.option-btn');
+      if (btns[num - 1] && !gameState.answered) {
+        answerQuestion(btns[num - 1].dataset.answer);
+        document.removeEventListener('keydown', handler);
+      }
+    }
+  };
+  document.addEventListener('keydown', handler);
+
+  var observer = new MutationObserver(function() {
+    if (!document.getElementById('game-play')) { document.removeEventListener('keydown', handler); observer.disconnect(); }
+  });
+  observer.observe(app, { childList: true });
+}
+
+function quitLevel() {
+  if (confirm('確定要離開這個關卡嗎？目前的進度不會儲存。')) {
+    clearInterval(gameState.timer);
+    gameState.currentLevel = null;
+    gameState.currentLevelId = null;
+    gameState.questions = [];
+    render();
+  }
+}
+
+function goToMap() {
+  clearInterval(gameState.timer);
+  gameState.currentChapter = null;
+  gameState.currentLevel = null;
+  gameState.questions = [];
+  render();
+}
+
+function goToGradeSelect() {
+  clearInterval(gameState.timer);
+  gameState.currentGrade = null;
+  gameState.currentChapter = null;
+  gameState.currentLevel = null;
+  gameState.questions = [];
+  render();
+}
+
+function showStats() {
+  var app = document.getElementById('app');
+  var chapters = getCurrentChapters();
+  var totalStars = 0, totalMax = 0, completedLevels = 0;
+
+  var html = '<div class=\"stats-overlay\" onclick=\"this.remove()\"><div class=\"stats-card\" onclick=\"event.stopPropagation()\"><h3>📊 學習紀錄</h3>';
+
+  for (var i = 0; i < chapters.length; i++) {
+    var ch = chapters[i];
+    var stars = getChapterStars(ch.id);
+    var max = getMaxChapterStars(ch.id);
+    totalStars += stars; totalMax += max;
+    var levels = getLevels(ch.id);
+    for (var j = 0; j < levels.length; j++) {
+      var p = getLevelProgress(ch.id, levels[j].id);
+      if (p && p.completed) completedLevels++;
+    }
+    html += '<div class=\"stats-row\"><span>' + ch.icon + ' ' + ch.name + '</span><span>' + stars + '/' + max + ' ⭐</span></div>';
+  }
+
+  html += '<div class=\"stats-row\" style=\"font-weight:700;\"><span>總計</span><span>⭐ ' + totalStars + '/' + totalMax + ' | ' + completedLevels + ' 關完成</span></div><button class=\"btn btn-primary btn-small\" onclick=\"document.querySelector(\'.stats-overlay\').remove()\" style=\"margin-top:16px;width:100%;\">關閉</button></div></div>';
+
+  var overlay = document.createElement('div');
+  overlay.innerHTML = html;
+  document.body.appendChild(overlay.firstElementChild);
+}
+
+function resetProgress() {
+  var gradeInfo = GRADES.find(function(g) { return g.id === gameState.currentGrade; });
+  if (confirm('確定要清除「' + (gradeInfo ? gradeInfo.name : '') + '」的所有學習進度，重新開始嗎？')) {
+    state = defaultState();
+    saveState();
+    goToMap();
+  }
+}
+
+function getDailyStreak() {
+  try {
+    var data = JSON.parse(localStorage.getItem('math_adventure_daily') || '{}');
+    var today = new Date().toDateString();
+    var yesterday = new Date(Date.now() - 86400000).toDateString();
+    if (data.lastDate === today) return data.streak || 0;
+    if (data.lastDate === yesterday) return data.streak || 0;
+    return 0;
+  } catch(e) { return 0; }
+}
+
+function updateDailyStreak() {
+  try {
+    var data = JSON.parse(localStorage.getItem('math_adventure_daily') || '{}');
+    var today = new Date().toDateString();
+    var yesterday = new Date(Date.now() - 86400000).toDateString();
+    if (data.lastDate === today) return;
+    if (data.lastDate === yesterday) data.streak = (data.streak || 0) + 1;
+    else data.streak = 1;
+    data.lastDate = today;
+    localStorage.setItem('math_adventure_daily', JSON.stringify(data));
+  } catch(e) {}
+}
+
+function showCharacter(msg) {
+  var existing = document.querySelector('.character-bubble');
+  if (existing) existing.remove();
+  var bubble = document.createElement('div');
+  bubble.className = 'character-bubble';
+  bubble.innerHTML = msg.replace(/\\n/g, '<br>');
+  document.body.appendChild(bubble);
+  setTimeout(function() { bubble.remove(); }, 3000);
+}
+
+document.addEventListener('DOMContentLoaded', function() { initCurrentUser(); render(); });
+document.addEventListener('click', function() { getAudioCtx(); }, { once: true });
+'''
+
+# ===== HTML ASSEMBLY =====
+ASSEMBLY_CODE = """
+# Assemble the complete HTML
+parts = [
+    HTML_START,
+    CSS,
+    HTML_MIDDLE,
+    GRADES_JS,
+    AUTH_JS,
+    GAME_STATE_JS,
+    UTIL_JS,
+    G3_GENERATORS_JS,
+    G4_GENERATORS_JS,
+    G5_GENERATORS_JS,
+    MASTER_GENERATORS_JS,
+    EXPLANATION_JS,
+    AUDIO_JS,
+    CONFETTI_JS,
+    GAME_CONTROLLER_JS,
+    HTML_END,
+]
+
+with open('C:/Users/xandy/WorkBuddy/2026-07-01-08-31-02/math-adventure.html', 'w', encoding='utf-8') as f:
+    for part in parts:
+        f.write(part)
+
+print('Done! HTML written.')
+"""
+
+exec(ASSEMBLY_CODE)
