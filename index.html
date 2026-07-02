@@ -152,6 +152,21 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
 .auth-error{color:var(--danger);font-size:13px;min-height:18px;font-weight:600}
 .auth-user-badge{display:inline-flex;align-items:center;gap:6px;background:#eef2ff;padding:6px 14px;border-radius:50px;font-size:13px;font-weight:600;color:var(--primary)}
 
+/* Admin Dashboard */
+#admin-screen{justify-content:flex-start;gap:14px;padding:24px 20px;text-align:center}
+.admin-title h1{font-size:24px;font-weight:900;background:linear-gradient(135deg,#7c3aed,#4f46e5);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:4px}
+.admin-title p{color:var(--text-light);font-size:14px}
+.admin-toolbar{display:flex;gap:10px;justify-content:center}
+.admin-table-wrap{width:100%;max-width:460px;overflow-x:auto;background:white;border-radius:var(--radius);box-shadow:var(--shadow)}
+.admin-table{width:100%;border-collapse:collapse;font-size:14px}
+.admin-table th{background:#f8fafc;padding:12px 10px;font-weight:700;color:var(--text-light);border-bottom:2px solid var(--border);text-align:left;white-space:nowrap}
+.admin-table td{padding:12px 10px;border-bottom:1px solid var(--border);text-align:left}
+.admin-table tr:last-child td{border-bottom:none}
+.admin-table tr:hover{background:#f8faff}
+.admin-table tr.admin-self{background:#fefce8}
+.admin-badge{display:inline-block;background:linear-gradient(135deg,#7c3aed,#4f46e5);color:white;font-size:10px;padding:2px 6px;border-radius:4px;vertical-align:middle;margin-left:4px}
+.admin-actions{white-space:nowrap}
+
 /* Leaderboard */
 #leaderboard-screen{justify-content:flex-start;gap:12px;padding:16px 20px}
 .lb-header{text-align:center;width:100%;padding:12px 0}
@@ -1757,6 +1772,11 @@ function render() {
     renderAuth(app);
     return;
   }
+  // Admin: show admin dashboard
+  if (window.isAdmin && window.isAdmin()) {
+    renderAdminDashboard(app);
+    return;
+  }
   if (gameState.currentGrade === null) {
     renderGradeSelect(app);
   } else if (!gameState.currentChapter) {
@@ -2160,6 +2180,8 @@ function finishLevel() {
       }
     }
     saveState();
+    // Cloud sync: upload score to Firebase
+    if (window.cloudSyncScore) window.cloudSyncScore();
   }
 
   if (stars === 3) { playStar(); spawnConfetti(); }
@@ -2356,204 +2378,317 @@ function showCharacter(msg) {
   setTimeout(function() { bubble.remove(); }, 3000);
 }
 
+// Ensure admin account exists
+(function(){ var a=getAccounts(); if(!a['管理者']){ a['管理者']={password:'12345678',createdAt:new Date().toISOString()}; saveAccounts(a); } })();
+
 document.addEventListener('DOMContentLoaded', function() { initCurrentUser(); render(); });
 document.addEventListener('click', function() { getAudioCtx(); }, { once: true });
 
-</script>
 
 <script>
 (function(){
-  const GH_REPO = 'xandychen/math-GO';
-  const _t = atob('Z2l0aHViX3BhdF8xMUFJNlRKQlEwMnI3aXVMTWRGVFVjXzRUWEh0b1VHNEVweA==') + atob('cVJwWGdZOWcyaFd6TWd6d1FmczNvWWVUaVBleDM1WjVaRjZYUlpUUWJvZHJ5YzY=');
-  const GH_API = 'https://api.github.com/repos/' + GH_REPO;
-  let _cloudOk = false;
-  let _saveQueue = null;
+  // ===== Firebase Realtime Database Config =====
+  // !! REPLACE THIS with your Firebase database URL after creating a project at https://console.firebase.google.com/
+  var FB_DB = localStorage.getItem('math_fb_db_url') || 'https://math-adventure-c5ae3-default-rtdb.asia-southeast1.firebasedatabase.app/';
+  var FB_ONLINE = false;
 
-  // SHA-256
-  async function _h(s){
-    const b = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s));
-    return Array.from(new Uint8Array(b)).map(x=>x.toString(16).padStart(2,'0')).join('');
+  // Check Firebase connectivity
+  function fbOnline(){
+    return navigator.onLine !== false;
   }
 
-  // GitHub API helpers
-  async function _get(p){
-    const r = await fetch(GH_API+'/contents/'+p, {headers:{'Authorization':'token '+_t,'Accept':'application/vnd.github.v3+json'}});
-    if(!r.ok) throw new Error('GET '+p+' '+r.status);
-    return r.json();
-  }
-  async function _put(p, body, sha){
-    const o = {message:'sync:'+p, content:btoa(unescape(encodeURIComponent(body))), branch:'main'};
-    if(sha) o.sha = sha;
-    const r = await fetch(GH_API+'/contents/'+p, {method:'PUT', headers:{'Authorization':'token '+_t,'Accept':'application/vnd.github.v3+json','Content-Type':'application/json'}, body:JSON.stringify(o)});
-    if(!r.ok){ const e=await r.json(); throw new Error(e.message||'PUT '+r.status); }
-    return r.json();
-  }
-  async function _read(p){
-    try { const d = await _get(p); return {data: JSON.parse(decodeURIComponent(escape(atob(d.content)))), sha: d.sha}; }
-    catch(e){ if(e.message&&e.message.includes('404')) return null; throw e; }
-  }
-  async function _write(p, body, sha){ return await _put(p, body, sha); }
-
-  // ===== Account functions =====
-  window.registerUserCloud = async function(u,p){
-    u=u.trim(); if(!u||u.length<2) return '帳號至少2字元'; if(!p||p.length<3) return '密碼至少3字元';
-    try{
-      const r = await _read('data/accounts.json');
-      const accts = r ? r.data : {accounts:{},version:1};
-      if(accts.accounts[u]) return '帳號已存在';
-      accts.accounts[u] = {ph:await _h(p), ca:new Date().toISOString()};
-      await _write('data/accounts.json', JSON.stringify(accts,null,2), r?r.sha:null);
-      return null;
-    }catch(e){ return '網路錯誤，請重試'; }
-  };
-  window.loginUserCloud = async function(u,p){
-    u=u.trim(); if(!u||!p) return '請輸入帳號密碼';
-    try{
-      const r = await _read('data/accounts.json');
-      if(!r||!r.data.accounts[u]) return '帳號不存在';
-      if(r.data.accounts[u].ph!==await _h(p)) return '密碼錯誤';
-      return null;
-    }catch(e){ return '網路錯誤，請重試'; }
+  // ===== Cloud: Upload score after level completion =====
+  window.cloudSyncScore = function(){
+    if(!gCurrentUser || gCurrentUser==='管理者') return;
+    if(!fbOnline()) return;
+    var u = encodeURIComponent(gCurrentUser);
+    // Collect total stars per grade
+    var grades = {};
+    for(var gi=0;gi<GRADES.length;gi++){
+      var gid = GRADES[gi].id;
+      var total=0;
+      try{
+        var st=JSON.parse(localStorage.getItem('math_adventure_'+gCurrentUser+'_'+gid)||'{}');
+        if(st.progress) for(var c in st.progress) for(var l in st.progress[c]) total+=(st.progress[c][l].stars||0);
+      }catch(e){}
+      grades[gid] = total;
+    }
+    // Also include current grade if in-game
+    if(gameState.currentGrade){
+      var cgTotal=0;
+      try{
+        var st2=JSON.parse(localStorage.getItem(getStorageKey())||'{}');
+        if(st2.progress) for(var c2 in st2.progress) for(var l2 in st2.progress[c2]) cgTotal+=(st2.progress[c2][l2].stars||0);
+      }catch(e){}
+      grades[gameState.currentGrade] = cgTotal;
+    }
+    var payload = {name:gCurrentUser, grades:grades, ts:Date.now()};
+    fetch(FB_DB+'/leaderboard/'+u+'.json', {
+      method:'PUT',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(payload)
+    }).then(function(r){ return r.json(); }).then(function(){
+      console.log('☁️ Score synced to cloud for '+gCurrentUser);
+    }).catch(function(e){
+      console.log('⚠️ Cloud sync failed (offline?)');
+    });
   };
 
-  // ===== Progress sync =====
-  async function _saveProgress(u, gid){
-    const key = 'math_adventure_'+u+'_'+gid;
-    const st = localStorage.getItem(key); if(!st) return;
-    await _write('data/progress/'+u+'_'+gid+'.json', st, null); // sha fetched inside _write via _read
+  // ===== Cloud: Load all leaderboard data =====
+  function loadCloudLB(fg){
+    return new Promise(function(resolve, reject){
+      if(!fbOnline()){ reject('offline'); return; }
+      fetch(FB_DB+'/leaderboard.json')
+        .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
+        .then(function(data){
+          if(!data){ resolve([]); return; }
+          var list=[];
+          for(var nm in data){
+            var entry = data[nm];
+            var stars=0;
+            if(fg==='ALL'){
+              if(entry.grades) for(var gid in entry.grades) stars+=entry.grades[gid];
+            }else{
+              if(entry.grades && entry.grades[fg]) stars=entry.grades[fg];
+            }
+            list.push({username:entry.name||nm, stars:stars});
+          }
+          list.sort(function(a,b){ return b.stars-a.stars; });
+          resolve(list);
+        })
+        .catch(function(e){ reject(e); });
+    });
   }
-  async function _loadProgress(u, gid){
-    try{
-      const r = await _read('data/progress/'+u+'_'+gid+'.json');
-      if(r) localStorage.setItem('math_adventure_'+u+'_'+gid, JSON.stringify(r.data));
-    }catch(e){}
-  }
-  window.syncFromCloud = async function(){
-    if(!gCurrentUser) return;
-    for(let g of GRADES) await _loadProgress(gCurrentUser, g.id);
-  };
-  window.syncToCloud = async function(){
-    if(!gCurrentUser||!gameState.currentGrade) return;
-    try{ await _saveProgress(gCurrentUser, gameState.currentGrade); }catch(e){}
-  };
 
-  // ===== Override handleAuth =====
-  const _origHandleAuth = handleAuth;
-  window.handleAuth = async function(){
-    const uEl=document.getElementById('auth-username'), pEl=document.getElementById('auth-password'), eEl=document.getElementById('auth-error');
-    const btn=document.getElementById('auth-submit');
+  // ===== Local handleAuth (no cloud dependency) =====
+  window.handleAuth = function(){
+    var uEl=document.getElementById('auth-username'), pEl=document.getElementById('auth-password'), eEl=document.getElementById('auth-error');
+    var btn=document.getElementById('auth-submit');
     if(!uEl||!pEl) return;
-    btn.disabled=true; btn.textContent='處理中...';
-    try{
-      let err=null;
-      if(authMode==='register'){
-        err = await window.registerUserCloud(uEl.value, pEl.value);
-        if(!err){
-          gCurrentUser = uEl.value.trim();
-          localStorage.setItem('math_adventure_current_user', gCurrentUser);
-          await window.syncFromCloud();
-          playCorrect(); render(); return;
+    var uname = uEl.value.trim(), pwd = pEl.value;
+    var isAdmin = (uname === '管理者' && pwd === '12345678');
+
+    // Admin login
+    if(authMode==='login' && isAdmin){
+      var accts = getAccounts();
+      if(!accts['管理者']){ accts['管理者']={password:'12345678',createdAt:new Date().toISOString()}; saveAccounts(accts); }
+      gCurrentUser = '管理者';
+      localStorage.setItem('math_adventure_current_user', gCurrentUser);
+      playCorrect(); render(); return;
+    }
+
+    var err = null;
+    if(authMode === 'register'){
+      err = registerUser(uname, pwd);
+      if(!err){ setCurrentUser(uname.trim()); playCorrect(); render(); return; }
+    }else{
+      err = loginUser(uname, pwd);
+      if(!err){ setCurrentUser(uname.trim()); playClick(); render(); return; }
+    }
+    if(eEl) eEl.textContent = err;
+    playWrong();
+  };
+
+  // ===== Local + Cloud Leaderboard =====
+  window.renderLeaderboard = function(app, fg){
+    if(!fg) fg='ALL';
+    var h='';
+    h+='<div class="screen active" id="leaderboard-screen">';
+    h+='<div class="lb-header"><div style="font-size:40px;animation:float 2s ease-in-out infinite;">🏆</div><h1>排行榜</h1><p>'+(fbOnline()?'☁️ 雲端同步':'📱 本機模式')+'</p></div>';
+    h+='<div class="lb-tabs">';
+    h+='<button class="lb-tab '+(fg==='ALL'?'active':'')+'" onclick="renderLBU(\'ALL\')">全部</button>';
+    for(var gi=0;gi<GRADES.length;gi++) h+='<button class="lb-tab '+(fg===GRADES[gi].id?'active':'')+'" onclick="renderLBU(\''+GRADES[gi].id+'\')">'+GRADES[gi].name+'</button>';
+    h+='</div>';
+    h+='<div id="lb-content"><div style="padding:20px;text-align:center;">載入中...</div></div>';
+    h+='<button class="btn btn-secondary btn-small" onclick="goToGradeSelect()" style="margin-top:12px;">🏫 回到年級選擇</button>';
+    h+='</div>';
+    app.innerHTML = h;
+    var c=document.getElementById('lb-content');
+
+    // Try cloud first, fall back to local
+    loadCloudLB(fg).then(function(list){
+      FB_ONLINE = true;
+      _renderLBRows(list, fg, true);
+    }).catch(function(){
+      // Cloud failed, use local
+      FB_ONLINE = false;
+      _renderLocalLB(fg);
+    });
+  };
+
+  function _renderLocalLB(fg){
+    var accts = getAccounts();
+    var list = [];
+    for(var nm in accts){
+      var totalStars = 0;
+      if(fg==='ALL'){
+        for(var gi=0;gi<GRADES.length;gi++){
+          try{ var st=JSON.parse(localStorage.getItem('math_adventure_'+nm+'_'+GRADES[gi].id)||'{}');
+            if(st.progress) for(var c in st.progress) for(var l in st.progress[c]) totalStars+=(st.progress[c][l].stars||0);
+          }catch(e){}
         }
       }else{
-        err = await window.loginUserCloud(uEl.value, pEl.value);
-        if(!err){
-          gCurrentUser = uEl.value.trim();
-          localStorage.setItem('math_adventure_current_user', gCurrentUser);
-          await window.syncFromCloud();
-          playClick(); render(); return;
-        }
+        try{ var st2=JSON.parse(localStorage.getItem('math_adventure_'+nm+'_'+fg)||'{}');
+          if(st2.progress) for(var c2 in st2.progress) for(var l2 in st2.progress[c2]) totalStars+=(st2.progress[c2][l2].stars||0);
+        }catch(e){}
       }
-      if(eEl) eEl.textContent = err;
-      playWrong();
-    }catch(e){ if(eEl) eEl.textContent='發生錯誤'; }
-    finally{ btn.disabled=false; btn.textContent=authMode==='login'?'登入':'建立帳號'; }
-  };
-
-  // ===== Override saveState to also sync =====
-  const _origSave = saveState;
-  window.saveState = function(){
-    _origSave();
-    // Debounced cloud save
-    clearTimeout(_saveQueue);
-    _saveQueue = setTimeout(()=>{ window.syncToCloud(); }, 2000);
-  };
-
-  // ===== Cloud Leaderboard =====
-  window.renderLeaderboard = async function(app, fg){
-    if(!fg) fg='ALL';
-    let h='';
-    h+=`<div class="screen active" id="leaderboard-screen">`;
-    h+=`<div class="lb-header"><div style="font-size:40px;animation:float 2s ease-in-out infinite;">🏆</div><h1>排行榜</h1><p>即時雲端資料</p></div>`;
-    h+=`<div class="lb-tabs">`;
-    h+=`<button class="lb-tab ${fg==='ALL'?'active':''}" onclick="renderLBU('ALL')">全部</button>`;
-    for(let g of GRADES) h+=`<button class="lb-tab ${fg===g.id?'active':''}" onclick="renderLBU('${g.id}')">${g.name}</button>`;
-    h+=`</div>`;
-    h+=`<div id="lb-content"><div style="padding:20px;text-align:center;">☁️ 從雲端載入...</div></div>`;
-    h+=`<button class="btn btn-secondary btn-small" onclick="goToGradeSelect()" style="margin-top:12px;">🏫 回到年級選擇</button>`;
-    h+=`</div>`;
-    app.innerHTML = h;
-    try{
-      const r = await _read('data/accounts.json');
-      if(!r) return;
-      const names = Object.keys(r.data.accounts);
-      const list = [];
-      for(let nm of names){
-        let stars=0;
-        if(fg==='ALL'){ for(let g of GRADES) stars+=await _calcStars(nm,g.id); }
-        else stars = await _calcStars(nm, fg);
-        list.push({username:nm, stars});
-      }
-      list.sort((a,b)=>b.stars-a.stars);
-      _renderLB(list, fg);
-    }catch(e){ document.getElementById('lb-content').innerHTML='<div class="lb-empty">載入失敗</div>'; }
-  };
-  async function _calcStars(u, gid){
-    try{
-      const r = await _read('data/progress/'+u+'_'+gid+'.json');
-      if(!r||!r.data.progress) return 0;
-      let t=0; for(let c in r.data.progress) for(let l in r.data.progress[c]) t+=(r.data.progress[c][l].stars||0);
-      return t;
-    }catch(e){ return 0; }
-  }
-  function _renderLB(list, fg){
-    const c=document.getElementById('lb-content'); if(!c) return;
-    if(!list.length){ c.innerHTML='<div class="lb-empty">還沒有資料</div>'; return; }
-    let h='<div class="lb-list">';
-    for(let i=0;i<list.length;i++){
-      const e=list[i], r=i+1, iyu=e.username===gCurrentUser;
-      let dt='';
-      if(fg==='ALL'){ let ps=[]; for(let g of GRADES) ps.push(g.name); dt=ps.join(' · '); }
-      else{ const gi=GRADES.find(g=>g.id===fg); dt=gi?gi.name+' · '+gi.publisher+'版':''; }
-      h+=`<div class="lb-row">`;
-      h+=`<div class="lb-rank r${r<=3?r:'4plus'}">${r<=3?(r===1?'🥇':r===2?'🥈':'🥉'):r}</div>`;
-      h+=`<div class="lb-info"><div class="lb-name">${e.username}${iyu?'<span class="lb-you-badge">你</span>':''}</div><div class="lb-detail">${dt}</div></div>`;
-      h+=`<div class="lb-score">${e.stars} ⭐</div>`;
-      h+=`</div>`;
+      list.push({username:nm, stars:totalStars});
     }
-    h+='</div>';
-    c.innerHTML=h;
+    list.sort(function(a,b){ return b.stars-a.stars; });
+    _renderLBRows(list, fg, false);
   }
-  window.renderLBU = async function(g){ const a=document.getElementById('app'); await window.renderLeaderboard(a,g); };
 
-  // ===== Show sync status in UI =====
-  const _origRGS = renderGradeSelect;
-  window.renderGradeSelect = function(app){
-    _origRGS(app);
-    // Add "雲端同步" button if not present
-    setTimeout(()=>{
-      const d=app.querySelector('#grade-screen');
-      if(d&&!d.querySelector('.cloud-sync-btn')){
-        const b=document.createElement('button');
-        b.className='btn btn-secondary btn-small cloud-sync-btn';
-        b.textContent='☁️ 立即同步雲端';
-        b.style.marginTop='8px';
-        b.onclick=()=>{ window.syncFromCloud().then(()=>{ render(); alert('☁️ 雲端資料已同步！'); }); };
-        d.querySelector('.grade-list').after(b);
+  function _renderLBRows(list, fg, isCloud){
+    var c=document.getElementById('lb-content');
+    if(!list||!list.length){ c.innerHTML='<div class="lb-empty">還沒有資料'+(isCloud?'<br><small>完成關卡後成績自動上傳</small>':'')+'</div>'; return; }
+    var lbh='<div class="lb-list">';
+    for(var i=0;i<list.length;i++){
+      var e=list[i], r=i+1, iyu=e.username===gCurrentUser;
+      var dt='';
+      if(fg==='ALL'){ var ps=[]; for(var gi=0;gi<GRADES.length;gi++) ps.push(GRADES[gi].name); dt=ps.join(' · '); }
+      else{ var gi2=GRADES.find(function(g){ return g.id===fg; }); dt=gi2?gi2.name+' · '+gi2.publisher+'版':''; }
+      lbh+='<div class="lb-row">';
+      lbh+='<div class="lb-rank r'+(r<=3?r:'4plus')+'">'+(r<=3?(r===1?'🥇':r===2?'🥈':'🥉'):r)+'</div>';
+      lbh+='<div class="lb-info"><div class="lb-name">'+e.username+(iyu?'<span class="lb-you-badge">你</span>':'')+(isCloud?' <span style="font-size:10px;color:#3b82f6;">☁️</span>':'')+'</div><div class="lb-detail">'+dt+'</div></div>';
+      lbh+='<div class="lb-score">'+e.stars+' ⭐</div>';
+      lbh+='</div>';
+    }
+    lbh+='</div>';
+    c.innerHTML=lbh;
+  }
+  window.renderLBU = function(g){ var a=document.getElementById('app'); window.renderLeaderboard(a,g); };
+
+  // ===== Admin System =====
+  window.isAdmin = function(){ return gCurrentUser === '管理者'; };
+
+  window.renderAdminDashboard = function(app){
+    var h='';
+    h+='<div class="screen active" id="admin-screen">';
+    h+='<div style="font-size:56px;animation:float 2s ease-in-out infinite;">🛡️</div>';
+    h+='<div class="admin-title"><h1>管理者後台</h1><p>使用者帳號管理</p></div>';
+    h+='<div class="admin-toolbar">';
+    h+='<button class="btn btn-primary btn-small" onclick="showAddUserForm()">➕ 新增使用者</button>';
+    h+='<button class="btn btn-small" style="background:#3b82f6;color:#fff;padding:6px 14px;font-size:13px;" onclick="showFBSetting()">☁️ Firebase 設定</button>';
+    h+='<button class="btn btn-secondary btn-small" onclick="adminLogout()">🚪 登出</button>';
+    h+='</div>';
+    h+='<div id="admin-fb-status" style="font-size:12px;color:#666;margin-bottom:8px;"></div>';
+    h+='<div class="admin-table-wrap"><table class="admin-table"><thead><tr><th>#</th><th>帳號</th><th>建立時間</th><th>總⭐</th><th>操作</th></tr></thead><tbody>';
+
+    var accts = getAccounts();
+    var rows = [];
+    for(var uname in accts){
+      var totalStars = 0;
+      for(var gi=0;gi<GRADES.length;gi++){
+        try{
+          var st=JSON.parse(localStorage.getItem('math_adventure_'+uname+'_'+GRADES[gi].id)||'{}');
+          if(st.progress) for(var c in st.progress) for(var l in st.progress[c]) totalStars+=(st.progress[c][l].stars||0);
+        }catch(e){}
       }
-    },100);
+      rows.push({username:uname, createdAt:accts[uname].createdAt||'未知', stars:totalStars});
+    }
+    rows.sort(function(a,b){ return b.stars-a.stars; });
+
+    for(var i=0;i<rows.length;i++){
+      var r=rows[i];
+      h+='<tr class="'+(r.username==='管理者'?'admin-self':'')+'">';
+      h+='<td>'+(i+1)+'</td>';
+      h+='<td><strong>'+r.username+'</strong>'+(r.username==='管理者'?' <span class="admin-badge">管理員</span>':'')+'</td>';
+      h+='<td>'+r.createdAt.substring(0,10)+'</td>';
+      h+='<td>'+r.stars+' ⭐</td>';
+      h+='<td class="admin-actions">';
+      if(r.username!=='管理者'){
+        h+='<button class="btn btn-small" style="background:#f59e0b;color:#fff;padding:6px 12px;font-size:12px;" onclick="showEditUserForm(\''+r.username+'\')">✏️ 編輯</button> ';
+        h+='<button class="btn btn-small" style="background:#ef4444;color:#fff;padding:6px 12px;font-size:12px;" onclick="adminDeleteUser(\''+r.username+'\')">🗑️ 刪除</button>';
+      }else{
+        h+='<span style="color:var(--text-light);font-size:12px;">不可操作</span>';
+      }
+      h+='</td></tr>';
+    }
+    h+='</tbody></table></div>';
+    h+='<p style="margin-top:12px;color:var(--text-light);font-size:13px;">目前共有 <b>'+rows.length+'</b> 位使用者</p>';
+    h+='</div>';
+    app.innerHTML = h;
+    // Show Firebase status
+    setTimeout(function(){
+      var fs=document.getElementById('admin-fb-status');
+      if(fs){
+        var url=localStorage.getItem('math_fb_db_url')||'';
+        fs.innerHTML=url?'☁️ Firebase: <b style="color:#16a34a;">已設定</b> ('+url+')':'☁️ Firebase: <b style="color:#ef4444;">未設定</b> — 點擊上方按鈕設定';
+      }
+    },50);
   };
 
-  console.log('☁️ Cloud sync loaded');
+  window.showAddUserForm = function(){
+    var un=prompt('請輸入新帳號名稱（至少2字元）：');
+    if(!un||un.trim().length<2){ alert('帳號名稱至少需要2字元'); return; }
+    un=un.trim();
+    var accts=getAccounts();
+    if(accts[un]){ alert('「'+un+'」已經存在！'); return; }
+    var pw=prompt('請輸入「'+un+'」的密碼（至少3字元）：');
+    if(!pw||pw.length<3){ alert('密碼至少需要3字元'); return; }
+    accts[un]={password:pw, createdAt:new Date().toISOString()};
+    saveAccounts(accts);
+    playCorrect();
+    var app=document.getElementById('app'); renderAdminDashboard(app);
+    alert('✅ 已新增使用者：'+un);
+  };
+
+  window.showEditUserForm = function(uname){
+    var newPw=prompt('請輸入「'+uname+'」的新密碼（至少3字元，取消則不修改）：');
+    if(newPw===null) return;
+    if(newPw.length<3){ alert('密碼至少需要3字元'); return; }
+    var accts=getAccounts();
+    if(!accts[uname]){ alert('找不到帳號「'+uname+'」'); return; }
+    accts[uname].password=newPw;
+    saveAccounts(accts);
+    playCorrect();
+    var app=document.getElementById('app'); renderAdminDashboard(app);
+    alert('✅ 「'+uname+'」的密碼已更新');
+  };
+
+  window.adminDeleteUser = function(uname){
+    if(!confirm('⚠️ 確定要永久刪除帳號「'+uname+'」嗎？\n\n所有該使用者的學習進度也會一併清除！')) return;
+    var accts=getAccounts();
+    delete accts[uname];
+    saveAccounts(accts);
+    // Clean up progress
+    for(var gi=0;gi<GRADES.length;gi++){
+      localStorage.removeItem('math_adventure_'+uname+'_'+GRADES[gi].id);
+    }
+    playClick();
+    var app=document.getElementById('app'); renderAdminDashboard(app);
+    alert('✅ 已刪除帳號：'+uname);
+  };
+
+  // ===== Firebase URL config for admin =====
+  window.showFBSetting = function(){
+    var cur = localStorage.getItem('math_fb_db_url') || '';
+    var url = prompt('請輸入 Firebase Realtime Database URL：\n\n格式範例：\nhttps://YOUR-PROJECT.firebaseio.com\n\n留空可清除設定（僅使用本機模式）', cur);
+    if(url===null) return; // cancelled
+    url = (url||'').trim();
+    if(url){
+      // Auto-complete .firebaseio.com if missing
+      if(url.indexOf('://')===-1) url='https://'+url;
+      if(url.indexOf('firebaseio.com')===-1 && url.indexOf('firebasedatabase.app')===-1){
+        alert('⚠️ 網址格式不正確。\n請貼上完整的 Firebase Database URL\n例如：https://xxx.firebaseio.com');
+        return;
+      }
+      localStorage.setItem('math_fb_db_url', url);
+      alert('✅ Firebase 已設定！\n\n關卡完成後成績會自動上傳到雲端。\n排行榜會顯示所有使用者的雲端資料。');
+    }else{
+      localStorage.removeItem('math_fb_db_url');
+      alert('✅ 已清除 Firebase 設定，將使用本機模式。');
+    }
+    // Refresh admin dashboard
+    var app=document.getElementById('app'); renderAdminDashboard(app);
+  };
+
+  window.adminLogout = function(){
+    if(!confirm('確定要登出管理者後台嗎？')) return;
+    logoutUser(); render();
+  };
+
+  console.log('Admin & Auth loaded (local mode)');
 })();
 
 </script>

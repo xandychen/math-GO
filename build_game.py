@@ -151,6 +151,21 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
 .auth-error{color:var(--danger);font-size:13px;min-height:18px;font-weight:600}
 .auth-user-badge{display:inline-flex;align-items:center;gap:6px;background:#eef2ff;padding:6px 14px;border-radius:50px;font-size:13px;font-weight:600;color:var(--primary)}
 
+/* Admin Dashboard */
+#admin-screen{justify-content:flex-start;gap:14px;padding:24px 20px;text-align:center}
+.admin-title h1{font-size:24px;font-weight:900;background:linear-gradient(135deg,#7c3aed,#4f46e5);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:4px}
+.admin-title p{color:var(--text-light);font-size:14px}
+.admin-toolbar{display:flex;gap:10px;justify-content:center}
+.admin-table-wrap{width:100%;max-width:460px;overflow-x:auto;background:white;border-radius:var(--radius);box-shadow:var(--shadow)}
+.admin-table{width:100%;border-collapse:collapse;font-size:14px}
+.admin-table th{background:#f8fafc;padding:12px 10px;font-weight:700;color:var(--text-light);border-bottom:2px solid var(--border);text-align:left;white-space:nowrap}
+.admin-table td{padding:12px 10px;border-bottom:1px solid var(--border);text-align:left}
+.admin-table tr:last-child td{border-bottom:none}
+.admin-table tr:hover{background:#f8faff}
+.admin-table tr.admin-self{background:#fefce8}
+.admin-badge{display:inline-block;background:linear-gradient(135deg,#7c3aed,#4f46e5);color:white;font-size:10px;padding:2px 6px;border-radius:4px;vertical-align:middle;margin-left:4px}
+.admin-actions{white-space:nowrap}
+
 /* Leaderboard */
 #leaderboard-screen{justify-content:flex-start;gap:12px;padding:16px 20px}
 .lb-header{text-align:center;width:100%;padding:12px 0}
@@ -265,6 +280,122 @@ function logoutUser() {
   localStorage.removeItem('math_adventure_current_user');
 }
 
+// ===== Admin System =====
+function renderAdminDashboard(app) {
+  var h = '';
+  h += '<div class=\"screen active\" id=\"admin-screen\">';
+  h += '<div style=\"font-size:56px;animation:float 2s ease-in-out infinite;\">🛡️</div>';
+  h += '<div class=\"admin-title\"><h1>管理者後台</h1><p>使用者帳號管理</p></div>';
+  h += '<div class=\"admin-toolbar\">';
+  h += '<button class=\"btn btn-primary btn-small\" onclick=\"showAddUserForm()\">➕ 新增使用者</button>';
+  h += '<button class=\"btn btn-small\" style=\"background:#3b82f6;color:#fff;padding:6px 14px;font-size:13px;\" onclick=\"showFBSetting()\">☁️ Firebase 設定</button>';
+  h += '<button class=\"btn btn-secondary btn-small\" onclick=\"adminLogout()\">🚪 登出</button>';
+  h += '</div>';
+  h += '<div id=\"admin-fb-status\" style=\"font-size:12px;color:#666;margin-bottom:8px;\">☁️ Firebase: ' + (FB_DB ? '已設定' : '未設定') + '</div>';
+  h += '<div class=\"admin-table-wrap\"><table class=\"admin-table\"><thead><tr><th>#</th><th>帳號</th><th>建立時間</th><th>總⭐</th><th>操作</th></tr></thead><tbody>';
+
+  var accts = getAccounts();
+  var rows = [];
+  for (var uname in accts) {
+    var totalStars = 0;
+    for (var gi = 0; gi < GRADES.length; gi++) {
+      try {
+        var st = JSON.parse(localStorage.getItem('math_adventure_' + uname + '_' + GRADES[gi].id) || '{}');
+        if (st.progress) for (var c in st.progress) for (var l in st.progress[c]) totalStars += (st.progress[c][l].stars || 0);
+      } catch (e) {}
+    }
+    rows.push({ username: uname, createdAt: accts[uname].createdAt || '未知', stars: totalStars });
+  }
+  rows.sort(function (a, b) { return b.stars - a.stars; });
+
+  for (var i = 0; i < rows.length; i++) {
+    var r = rows[i];
+    h += '<tr class=\"' + (r.username === '管理者' ? 'admin-self' : '') + '\">';
+    h += '<td>' + (i + 1) + '</td>';
+    h += '<td><strong>' + r.username + '</strong>' + (r.username === '管理者' ? ' <span class=\"admin-badge\">管理員</span>' : '') + '</td>';
+    h += '<td>' + r.createdAt.substring(0, 10) + '</td>';
+    h += '<td>' + r.stars + ' ⭐</td>';
+    h += '<td class=\"admin-actions\">';
+    if (r.username !== '管理者') {
+      h += '<button class=\"btn btn-small\" style=\"background:#f59e0b;color:#fff;padding:6px 12px;font-size:12px;\" onclick=\"showEditUserForm(\\'' + r.username + '\\')\">✏️ 編輯</button> ';
+      h += '<button class=\"btn btn-small\" style=\"background:#ef4444;color:#fff;padding:6px 12px;font-size:12px;\" onclick=\"adminDeleteUser(\\'' + r.username + '\\')\">🗑️ 刪除</button>';
+    } else {
+      h += '<span style=\"color:var(--text-light);font-size:12px;\">不可操作</span>';
+    }
+    h += '</td></tr>';
+  }
+  h += '</tbody></table></div>';
+  h += '<p style=\"margin-top:12px;color:var(--text-light);font-size:13px;\">目前共有 <b>' + rows.length + '</b> 位使用者</p>';
+  h += '</div>';
+  app.innerHTML = h;
+}
+
+function showAddUserForm() {
+  var un = prompt('請輸入新帳號名稱（至少2字元）：');
+  if (!un || un.trim().length < 2) { alert('帳號名稱至少需要2字元'); return; }
+  un = un.trim();
+  var accts = getAccounts();
+  if (accts[un]) { alert('「' + un + '」已經存在！'); return; }
+  var pw = prompt('請輸入「' + un + '」的密碼（至少3字元）：');
+  if (!pw || pw.length < 3) { alert('密碼至少需要3字元'); return; }
+  accts[un] = { password: pw, createdAt: new Date().toISOString() };
+  saveAccounts(accts);
+  playCorrect();
+  renderAdminDashboard(document.getElementById('app'));
+  alert('✅ 已新增使用者：' + un);
+}
+
+function showEditUserForm(uname) {
+  var newPw = prompt('請輸入「' + uname + '」的新密碼（至少3字元，取消則不修改）：');
+  if (newPw === null) return;
+  if (newPw.length < 3) { alert('密碼至少需要3字元'); return; }
+  var accts = getAccounts();
+  if (!accts[uname]) { alert('找不到帳號「' + uname + '」'); return; }
+  accts[uname].password = newPw;
+  saveAccounts(accts);
+  playCorrect();
+  renderAdminDashboard(document.getElementById('app'));
+  alert('✅ 「' + uname + '」的密碼已更新');
+}
+
+function adminDeleteUser(uname) {
+  if (!confirm('⚠️ 確定要永久刪除帳號「' + uname + '」嗎？\n\n所有該使用者的學習進度也會一併清除！')) return;
+  var accts = getAccounts();
+  delete accts[uname];
+  saveAccounts(accts);
+  for (var gi = 0; gi < GRADES.length; gi++) {
+    localStorage.removeItem('math_adventure_' + uname + '_' + GRADES[gi].id);
+  }
+  playClick();
+  renderAdminDashboard(document.getElementById('app'));
+  alert('✅ 已刪除帳號：' + uname);
+}
+
+function adminLogout() {
+  if (!confirm('確定要登出管理者後台嗎？')) return;
+  logoutUser();
+  render();
+}
+
+function showFBSetting() {
+  var current = localStorage.getItem('math_fb_db_url') || FB_DB;
+  var url = prompt('請輸入 Firebase Realtime Database 網址：\n\n（留空則清除設定，使用本機模式）', current);
+  if (url === null) return;
+  if (!url || url.trim() === '') {
+    localStorage.removeItem('math_fb_db_url');
+    FB_DB = '';
+    alert('☁️ Firebase 設定已清除，將使用本機排行榜');
+  } else {
+    url = url.trim();
+    localStorage.setItem('math_fb_db_url', url);
+    FB_DB = url;
+    alert('✅ Firebase 已設定！\n\n關卡完成後成績會自動上傳到雲端排行榜');
+  }
+  renderAdminDashboard(document.getElementById('app'));
+}
+
+window.isAdmin = function(){ return gCurrentUser === '管理者'; };
+
 // Calculate total stars for a user in a specific grade
 function getUserGradeStars(username, gradeId) {
   try {
@@ -349,16 +480,92 @@ function switchAuthTab(mode) {
   if (error) error.textContent = '';
 }
 
+// ===== Firebase Cloud Sync =====
+var FB_DB = localStorage.getItem('math_fb_db_url') || 'https://math-adventure-c5ae3-default-rtdb.asia-southeast1.firebasedatabase.app/';
+var FB_ONLINE = false;
+
+function fbOnline(){ return navigator.onLine !== false; }
+
+window.cloudSyncScore = function(){
+  if(!gCurrentUser || gCurrentUser==='管理者') return;
+  if(!fbOnline()) return;
+  var u = encodeURIComponent(gCurrentUser);
+  var grades = {};
+  for(var gi=0;gi<GRADES.length;gi++){
+    var gid = GRADES[gi].id;
+    var total=0;
+    try{
+      var st=JSON.parse(localStorage.getItem('math_adventure_'+gCurrentUser+'_'+gid)||'{}');
+      if(st.progress) for(var c in st.progress) for(var l in st.progress[c]) total+=(st.progress[c][l].stars||0);
+    }catch(e){}
+    grades[gid] = total;
+  }
+  if(gameState.currentGrade){
+    var cgTotal=0;
+    try{
+      var st2=JSON.parse(localStorage.getItem(getStorageKey())||'{}');
+      if(st2.progress) for(var c2 in st2.progress) for(var l2 in st2.progress[c2]) cgTotal+=(st2.progress[c2][l2].stars||0);
+    }catch(e){}
+    grades[gameState.currentGrade] = cgTotal;
+  }
+  var payload = {name:gCurrentUser, grades:grades, ts:Date.now()};
+  fetch(FB_DB+'/leaderboard/'+u+'.json', {
+    method:'PUT',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify(payload)
+  }).then(function(r){ return r.json(); }).then(function(){
+    console.log('Cloud score synced for '+gCurrentUser);
+  }).catch(function(e){
+    console.log('Cloud sync failed (offline?)');
+  });
+};
+
+function loadCloudLB(fg){
+  return new Promise(function(resolve, reject){
+    if(!fbOnline()){ reject('offline'); return; }
+    fetch(FB_DB+'/leaderboard.json')
+      .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
+      .then(function(data){
+        if(!data){ resolve([]); return; }
+        var list=[];
+        for(var nm in data){
+          var entry = data[nm];
+          var stars=0;
+          if(fg==='ALL'){
+            if(entry.grades) for(var gid in entry.grades) stars+=entry.grades[gid];
+          }else{
+            if(entry.grades && entry.grades[fg]) stars=entry.grades[fg];
+          }
+          list.push({username:entry.name||nm, stars:stars});
+        }
+        list.sort(function(a,b){ return b.stars-a.stars; });
+        resolve(list);
+      })
+      .catch(function(e){ reject(e); });
+  });
+}
+
 function handleAuth() {
   var username = document.getElementById('auth-username').value;
   var password = document.getElementById('auth-password').value;
   var error = document.getElementById('auth-error');
 
+  // Admin login check
+  var uname = username.trim();
+  if (authMode === 'login' && uname === '管理者' && password === '12345678') {
+    var accts = getAccounts();
+    if (!accts['管理者']) { accts['管理者'] = { password: '12345678', createdAt: new Date().toISOString() }; saveAccounts(accts); }
+    setCurrentUser('管理者');
+    playCorrect();
+    render();
+    return;
+  }
+
   var err = null;
   if (authMode === 'register') {
     err = registerUser(username, password);
     if (!err) {
-      setCurrentUser(username.trim());
+      setCurrentUser(uname);
       playCorrect();
       render();
       return;
@@ -366,7 +573,7 @@ function handleAuth() {
   } else {
     err = loginUser(username, password);
     if (!err) {
-      setCurrentUser(username.trim());
+      setCurrentUser(uname);
       playClick();
       render();
       return;
@@ -376,7 +583,7 @@ function handleAuth() {
   playWrong();
 }
 
-// ===== Leaderboard Screen =====
+// ===== Leaderboard Screen (Cloud-first + Local fallback) =====
 function renderLeaderboard(app, filterGrade) {
   if (!filterGrade) filterGrade = 'ALL';
   var html = '';
@@ -384,10 +591,9 @@ function renderLeaderboard(app, filterGrade) {
   html += '<div class="lb-header">';
   html += '<div style="font-size:40px;animation:float 2s ease-in-out infinite;">🏆</div>';
   html += '<h1>排行榜</h1>';
-  html += '<p>看看大家的學習成果！</p>';
+  html += '<p>' + (fbOnline() ? '☁️ 雲端同步' : '📱 本機模式') + '</p>';
   html += '</div>';
 
-  // Grade filter tabs
   html += '<div class="lb-tabs">';
   html += '<button class="lb-tab ' + (filterGrade === 'ALL' ? 'active' : '') + '" onclick="renderLeaderboardFilter(\'ALL\')">全部</button>';
   for (var i = 0; i < GRADES.length; i++) {
@@ -395,52 +601,64 @@ function renderLeaderboard(app, filterGrade) {
   }
   html += '</div>';
 
-  var list;
-  if (filterGrade === 'ALL') {
-    list = getLeaderboard(null);
-  } else {
-    list = getLeaderboard(filterGrade);
-  }
-
-  var currentUser = gCurrentUser;
-
-  if (list.length === 0) {
-    html += '<div class="lb-empty">還沒有排行榜資料，快去答題累積星星吧！⭐</div>';
-  } else {
-    html += '<div class="lb-list">';
-    for (var i = 0; i < list.length; i++) {
-      var entry = list[i];
-      var rank = i + 1;
-      var isYou = entry.username === currentUser;
-
-      var detailText = '';
-      if (filterGrade === 'ALL') {
-        var parts = [];
-        for (var j = 0; j < GRADES.length; j++) {
-          var gStars = getUserGradeStars(entry.username, GRADES[j].id);
-          if (gStars > 0) parts.push(GRADES[j].name + ':' + gStars + '⭐');
-        }
-        detailText = parts.length > 0 ? parts.join(' · ') : '還沒開始挑戰';
-      } else {
-        var gradeInfo = GRADES.find(function(g) { return g.id === filterGrade; });
-        detailText = gradeInfo ? gradeInfo.name + ' · ' + gradeInfo.publisher + '版' : '';
-      }
-
-      html += '<div class="lb-row">';
-      html += '<div class="lb-rank r' + (rank <= 3 ? rank : '4plus') + '">' + (rank <= 3 ? (rank === 1 ? '🥇' : rank === 2 ? '🥈' : '🥉') : rank) + '</div>';
-      html += '<div class="lb-info">';
-      html += '<div class="lb-name">' + entry.username + (isYou ? '<span class="lb-you-badge">你</span>' : '') + '</div>';
-      html += '<div class="lb-detail">' + detailText + '</div>';
-      html += '</div>';
-      html += '<div class="lb-score">' + entry.stars + ' ⭐</div>';
-      html += '</div>';
-    }
-    html += '</div>';
-  }
-
+  html += '<div id="lb-content"><div style="padding:20px;text-align:center;">載入中...</div></div>';
   html += '<button class="btn btn-secondary btn-small" onclick="goToGradeSelect()" style="margin-top:12px;">🏫 回到年級選擇</button>';
   html += '</div>';
   app.innerHTML = html;
+
+  loadCloudLB(filterGrade).then(function(list){
+    FB_ONLINE = true;
+    _renderLBRows(list, filterGrade, true);
+  }).catch(function(){
+    FB_ONLINE = false;
+    _renderLocalLB(filterGrade);
+  });
+}
+
+function _renderLocalLB(fg){
+  var list;
+  if (fg === 'ALL') { list = getLeaderboard(null); }
+  else { list = getLeaderboard(fg); }
+  _renderLBRows(list, fg, false);
+}
+
+function _renderLBRows(list, fg, isCloud){
+  var c = document.getElementById('lb-content');
+  if (!list || !list.length) {
+    c.innerHTML = '<div class="lb-empty">還沒有資料' + (isCloud ? '<br><small>完成關卡後成績自動上傳</small>' : '') + '</div>';
+    return;
+  }
+  var currentUser = gCurrentUser;
+  var lbh = '<div class="lb-list">';
+  for (var i = 0; i < list.length; i++) {
+    var entry = list[i];
+    var rank = i + 1;
+    var isYou = entry.username === currentUser;
+
+    var detailText = '';
+    if (fg === 'ALL') {
+      var parts = [];
+      for (var j = 0; j < GRADES.length; j++) {
+        var gStars = getUserGradeStars(entry.username, GRADES[j].id);
+        if (gStars > 0) parts.push(GRADES[j].name + ':' + gStars + '⭐');
+      }
+      detailText = parts.length > 0 ? parts.join(' · ') : '還沒開始挑戰';
+    } else {
+      var gradeInfo = GRADES.find(function(g) { return g.id === fg; });
+      detailText = gradeInfo ? gradeInfo.name + ' · ' + gradeInfo.publisher + '版' : '';
+    }
+
+    lbh += '<div class="lb-row">';
+    lbh += '<div class="lb-rank r' + (rank <= 3 ? rank : '4plus') + '">' + (rank <= 3 ? (rank === 1 ? '🥇' : rank === 2 ? '🥈' : '🥉') : rank) + '</div>';
+    lbh += '<div class="lb-info">';
+    lbh += '<div class="lb-name">' + entry.username + (isYou ? '<span class="lb-you-badge">你</span>' : '') + (isCloud ? ' <span style="font-size:10px;color:#3b82f6;">☁️</span>' : '') + '</div>';
+    lbh += '<div class="lb-detail">' + detailText + '</div>';
+    lbh += '</div>';
+    lbh += '<div class="lb-score">' + entry.stars + ' ⭐</div>';
+    lbh += '</div>';
+  }
+  lbh += '</div>';
+  c.innerHTML = lbh;
 }
 
 function renderLeaderboardFilter(grade) {
@@ -1812,6 +2030,11 @@ function render() {
     renderAuth(app);
     return;
   }
+  // Admin: show admin dashboard
+  if (gCurrentUser === '管理者') {
+    renderAdminDashboard(app);
+    return;
+  }
   if (gameState.currentGrade === null) {
     renderGradeSelect(app);
   } else if (!gameState.currentChapter) {
@@ -2215,6 +2438,8 @@ function finishLevel() {
       }
     }
     saveState();
+    // Cloud sync: upload score to Firebase
+    if (window.cloudSyncScore) window.cloudSyncScore();
   }
 
   if (stars === 3) { playStar(); spawnConfetti(); }
@@ -2410,6 +2635,9 @@ function showCharacter(msg) {
   document.body.appendChild(bubble);
   setTimeout(function() { bubble.remove(); }, 3000);
 }
+
+// Ensure admin account exists
+(function(){ var a=getAccounts(); if(!a['管理者']){ a['管理者']={password:'12345678',createdAt:new Date().toISOString()}; saveAccounts(a); } })();
 
 document.addEventListener('DOMContentLoaded', function() { initCurrentUser(); render(); });
 document.addEventListener('click', function() { getAudioCtx(); }, { once: true });
