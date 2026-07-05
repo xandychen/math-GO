@@ -702,11 +702,19 @@ function g3q3_mmToCm() {
   let correct;
   if (mm % 10 === 0) correct = cm + ' 公分';
   else correct = Math.floor(cm) + ' 公分 ' + (mm % 10) + ' 毫米';
+  // 統一格式（用空格），且避免跟正確答案重複
+  const mkOpt = (c, m) => m === 0 ? (c + ' 公分') : (c + ' 公分 ' + m + ' 毫米');
+  const d1c = Math.floor(cm) + rand(-1, 1);
+  const d1m = rand(0, 9);
+  const d2c = Math.floor(cm + rand(-2, 2)) || 1;
+  const d2m = rand(0, 9);
+  const d3c = Math.floor(cm + rand(-3, 3)) || 1;
+  const d3m = rand(1, 9);
   return { text: mm + ' 毫米 = ？公分？毫米', options: shuffle([
     correct,
-    Math.floor(cm) + ' 公分 ' + rand(0,9) + ' 毫米',
-    Math.floor(cm+rand(-2,2)||1) + ' 公分 ' + rand(0,9) + ' 毫米',
-    Math.floor(cm+rand(-3,3)||1) + ' 公分',
+    mkOpt(d1c, d1m),
+    mkOpt(d2c, d2m),
+    mkOpt(d3c, d3m)
   ].filter(function(v,i,a){return a.indexOf(v)===i}).slice(0,4)), correct: correct, type: 'choice' };
 }
 
@@ -725,11 +733,17 @@ function g3q3_lengthAdd() {
   let correct;
   if (totalMm === 0) correct = totalCm + ' 公分';
   else correct = totalCm + ' 公分 ' + totalMm + ' 毫米';
+  // 統一格式（用空格），且避免跟正確答案重複
+  const mkOpt = (cm, mm) => mm === 0 ? (cm + ' 公分') : (cm + ' 公分 ' + mm + ' 毫米');
+  const d1cm = totalCm + rand(-2, 2) || 1;
+  const d1mm = rand(0, 9);
+  const d2cm = totalCm + rand(-1, 3);
+  const d2mm = rand(0, 9);
   return { text: cm1+'公分'+mm1+'毫米 + '+cm2+'公分'+mm2+'毫米 = ？', options: shuffle([
     correct,
-    (totalCm+rand(-2,2)||1)+'公分'+rand(0,9)+'毫米',
-    (totalCm+rand(-1,3))+'公分'+rand(0,9)+'毫米',
-    totalCm+'公分',
+    mkOpt(d1cm, d1mm),
+    mkOpt(d2cm, d2mm),
+    mkOpt(totalCm, rand(0, 9))
   ].filter(function(v,i,a){return a.indexOf(v)===i}).slice(0,4)), correct: correct, type: 'choice' };
 }
 
