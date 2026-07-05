@@ -645,7 +645,7 @@ function _renderLBRows(list, fg, isCloud){
       detailText = parts.length > 0 ? parts.join(' · ') : '還沒開始挑戰';
     } else {
       var gradeInfo = GRADES.find(function(g) { return g.id === fg; });
-      detailText = gradeInfo ? gradeInfo.name + ' · ' + gradeInfo.publisher + '版' : '';
+      detailText = gradeInfo ? gradeInfo.name : '';
     }
 
     lbh += '<div class="lb-row">';
@@ -670,9 +670,9 @@ function renderLeaderboardFilter(grade) {
 # ===== GRADE DATA =====
 GRADES_JS = r'''
 const GRADES = [
-  { id:'G3', name:'三年級', publisher:'康軒', icon:'🌱', color:'#4f46e5' },
-  { id:'G4', name:'四年級', publisher:'南一', icon:'🌿', color:'#7c3aed' },
-  { id:'G5', name:'五年級', publisher:'南一', icon:'🌳', color:'#0891b2' },
+  { id:'G3', name:'三年級', icon:'🌱', color:'#4f46e5' },
+  { id:'G4', name:'四年級', icon:'🌿', color:'#7c3aed' },
+  { id:'G5', name:'五年級', icon:'🌳', color:'#0891b2' },
 ];
 
 // Per-grade chapter definitions
@@ -2094,7 +2094,6 @@ function renderGradeSelect(app) {
     html += '<div class="grade-icon">' + g.icon + '</div>';
     html += '<div class="grade-info">';
     html += '<div class="grade-name">' + g.name + '</div>';
-    html += '<div class="grade-pub">' + g.publisher + ' 版本</div>';
     html += '</div>';
     html += '<div class="grade-stars">⭐ ' + totalStars + '</div>';
     html += '</div>';
@@ -2166,7 +2165,7 @@ function renderWorldMap(app) {
   html += '<div style="font-size:48px;animation:float 2s ease-in-out infinite;">🧑‍🏫</div>';
   html += '</div>';
   html += '<h1 class="world-map-title">數學大冒險</h1>';
-  html += '<p class="world-map-subtitle">' + (gradeInfo ? gradeInfo.name + ' · ' + gradeInfo.publisher + '版' : '') + ' — 選擇世界開始挑戰！</p>';
+  html += '<p class="world-map-subtitle">' + (gradeInfo ? gradeInfo.name : '') + ' — 選擇世界開始挑戰！</p>';
   html += '<div class="progress-indicator" style="margin-bottom:12px;">⭐ ' + totalEarned + ' / ' + totalMax + ' 顆星</div>';
   html += '<div class="world-grid">';
 

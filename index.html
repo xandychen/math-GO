@@ -196,9 +196,9 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
 <script>
 
 const GRADES = [
-  { id:'G3', name:'三年級', publisher:'康軒', icon:'🌱', color:'#4f46e5' },
-  { id:'G4', name:'四年級', publisher:'南一', icon:'🌿', color:'#7c3aed' },
-  { id:'G5', name:'五年級', publisher:'南一', icon:'🌳', color:'#0891b2' },
+  { id:'G3', name:'三年級', icon:'🌱', color:'#4f46e5' },
+  { id:'G4', name:'四年級', icon:'🌿', color:'#7c3aed' },
+  { id:'G5', name:'五年級', icon:'🌳', color:'#0891b2' },
 ];
 
 // Per-grade chapter definitions
@@ -481,7 +481,7 @@ function renderLeaderboard(app, filterGrade) {
         detailText = parts.length > 0 ? parts.join(' · ') : '還沒開始挑戰';
       } else {
         var gradeInfo = GRADES.find(function(g) { return g.id === filterGrade; });
-        detailText = gradeInfo ? gradeInfo.name + ' · ' + gradeInfo.publisher + '版' : '';
+        detailText = gradeInfo ? gradeInfo.name : '';
       }
 
       html += '<div class="lb-row">';
@@ -1836,7 +1836,6 @@ function renderGradeSelect(app) {
     html += '<div class="grade-icon">' + g.icon + '</div>';
     html += '<div class="grade-info">';
     html += '<div class="grade-name">' + g.name + '</div>';
-    html += '<div class="grade-pub">' + g.publisher + ' 版本</div>';
     html += '</div>';
     html += '<div class="grade-stars">⭐ ' + totalStars + '</div>';
     html += '</div>';
@@ -1908,7 +1907,7 @@ function renderWorldMap(app) {
   html += '<div style="font-size:48px;animation:float 2s ease-in-out infinite;">🧑‍🏫</div>';
   html += '</div>';
   html += '<h1 class="world-map-title">數學大冒險</h1>';
-  html += '<p class="world-map-subtitle">' + (gradeInfo ? gradeInfo.name + ' · ' + gradeInfo.publisher + '版' : '') + ' — 選擇世界開始挑戰！</p>';
+  html += '<p class="world-map-subtitle">' + (gradeInfo ? gradeInfo.name : '') + ' — 選擇世界開始挑戰！</p>';
   html += '<div class="progress-indicator" style="margin-bottom:12px;">⭐ ' + totalEarned + ' / ' + totalMax + ' 顆星</div>';
   html += '<div class="world-grid">';
 
@@ -2560,7 +2559,7 @@ document.addEventListener('click', function() { getAudioCtx(); }, { once: true }
       var e=list[i], r=i+1, iyu=e.username===gCurrentUser;
       var dt='';
       if(fg==='ALL'){ var ps=[]; for(var gi=0;gi<GRADES.length;gi++) ps.push(GRADES[gi].name); dt=ps.join(' · '); }
-      else{ var gi2=GRADES.find(function(g){ return g.id===fg; }); dt=gi2?gi2.name+' · '+gi2.publisher+'版':''; }
+      else{ var gi2=GRADES.find(function(g){ return g.id===fg; }); dt=gi2?gi2.name:''; }
       lbh+='<div class="lb-row">';
       lbh+='<div class="lb-rank r'+(r<=3?r:'4plus')+'">'+(r<=3?(r===1?'🥇':r===2?'🥈':'🥉'):r)+'</div>';
       lbh+='<div class="lb-info"><div class="lb-name">'+e.username+(iyu?'<span class="lb-you-badge">你</span>':'')+(isCloud?' <span style="font-size:10px;color:#3b82f6;">☁️</span>':'')+'</div><div class="lb-detail">'+dt+'</div></div>';
